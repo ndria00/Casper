@@ -3,7 +3,6 @@ import argparse
 import os
 
 def entrypoint():
-    os.environ['PYTHONHASHSEED'] = '0'
     parser = argparse.ArgumentParser(prog = "Casper", description = "A native solver based on CEGAR for 2-ASP(Q)\n")
 
     parser.add_argument('--problem', help="path to problem file\n", required=True)

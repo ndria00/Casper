@@ -21,8 +21,8 @@ class ASPQSolver:
     assumptions : list
     p1 : MyProgram
     p2 : MyProgram
-    symbols_defined_in_p1 : set
-    symbols_defined_in_p2 : set
+    symbols_defined_in_p1 : dict
+    symbols_defined_in_p2 : dict
     last_model_symbols : clingo.solving._SymbolSequence
     last_model_symbols_set : set
     reduct_rewriter : ReductRewriter
@@ -58,8 +58,8 @@ class ASPQSolver:
         self.assumptions = []
         self.last_model_symbols = None
         self.last_model_symbols_set = set()
-        self.symbols_defined_in_p1 = set()
-        self.symbols_defined_in_p2 = set()
+        self.symbols_defined_in_p1 = dict()
+        self.symbols_defined_in_p2 = dict()
         self.p1 = self.programs_handler.p1()
         self.p2 = self.programs_handler.p2()        
         self.enumeration = True if n_models == 0 else False
@@ -123,7 +123,7 @@ class ASPQSolver:
         disjoint = True
         for atom in self.ctl_grounded.symbolic_atoms:
             if atom.symbol.name in self.p1.head_predicates:
-                self.symbols_defined_in_p1.add(atom.symbol)
+                self.symbols_defined_in_p1[atom.symbol]=None
                 choice = choice + str(atom.symbol) + ";"
                 disjoint = False
 
@@ -151,7 +151,7 @@ class ASPQSolver:
 
         for atom in self.ctl_counter_example.symbolic_atoms:
             if atom.symbol.name in self.programs_handler.original_programs[self.p2.program_type].head_predicates:
-                self.symbols_defined_in_p2.add(atom.symbol)
+                self.symbols_defined_in_p2[atom.symbol]=None
 
     def solve(self):
         result = None
@@ -210,7 +210,7 @@ class ASPQSolver:
         while True:
             #add model M_1 of P_1 as assumption
             self.assumptions = []
-            for symbol in self.symbols_defined_in_p1:
+            for symbol in self.symbols_defined_in_p1.keys():
                 if symbol in self.last_model_symbols_set and symbol.name in self.p1.head_predicates:
                     self.assumptions.append((symbol, True))
                 else:
@@ -240,7 +240,7 @@ class ASPQSolver:
                 self.logger.print("Countermove found")
                 # print("Counterexample: ", self.last_model_symbols)
             counterexample_facts = ""
-            for symbol in self.symbols_defined_in_p2:
+            for symbol in self.symbols_defined_in_p2.keys():
                 if symbol in self.last_model_symbols_set and symbol.name in self.programs_handler.original_programs[self.p2.program_type].head_predicates:
                     new_symbol = clingo.Function(symbol.name + self.reduct_rewriter.suffix_n, symbol.arguments, symbol.positive)
                     counterexample_facts = counterexample_facts + str(new_symbol) + "."
@@ -275,7 +275,7 @@ class ASPQSolver:
             
     def add_model_as_constraint(self):
         constraint = ":-"
-        for symbol in self.symbols_defined_in_p1:
+        for symbol in self.symbols_defined_in_p1.keys():
             if symbol in self.last_model_symbols_set:
                 constraint += f"{symbol},"
 
