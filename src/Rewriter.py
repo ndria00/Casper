@@ -8,7 +8,7 @@ import clingo.ast
 class Rewriter(clingo.ast.Transformer):
     unsat_pred_name : str
     program : list[str]
-    head_predicates : set 
+    head_predicates : set
     propositional_program : bool
 
     def __init__(self, unsat_pred_name=None):

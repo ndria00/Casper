@@ -1,5 +1,7 @@
 from pathlib import Path
 import clingo
+
+from .SolverSettings import SolverSettings
 from .MyProgram import MyProgram
 from .ConstraintModelPrinter import ConstraintModelPrinter
 from .DebugLogger import DebugLogger
@@ -7,14 +9,14 @@ from .ExecutionLogger import ExecutionLogger
 from .ModelPrinter import ModelPrinter
 from .MyLogger import MyLogger
 from .PositiveModelPrinter import PositiveModelPrinter
-from .SplitProgramRewriter import ProgramType
+from .SplitProgramRewriter import ASPQType
 from .ReductRewriter import ReductRewriter
 from .ProgramsHandler import ProgramsHandler
 
 class ASPQSolver:
     programs_handler : ProgramsHandler
-    encoding : str
-    instance : str
+    #for avoiding rewriting on facts
+    instance_program : str
     ctl_relaxed_programs : clingo.Control
     ctl_counter_example : clingo.Control
     ctl_p1 : clingo.Control
@@ -26,35 +28,34 @@ class ASPQSolver:
     last_model_symbols : clingo.solving._SymbolSequence
     last_model_symbols_set : set
     reduct_rewriter : ReductRewriter
-    n_models : int
-    enumeration : bool
     models_found : int
     exists_forall: bool
     counterexample_found : int
     model_printer : ModelPrinter
     logger : MyLogger
-    relaxed_solving: bool
+    settings : SolverSettings
 
-    def __init__(self, encoding_path, instance_path, n_models, debug, constraint_print, relaxed_solving) -> None:
-        self.relaxed_solving = relaxed_solving
+    def __init__(self, encoding_path, instance_path, solver_settings) -> None:
+        self.settings = solver_settings
         self.ctl_relaxed_programs = clingo.Control()
         self.ctl_counter_example = clingo.Control()
         self.ctl_p1 = clingo.Control()
+        encoding_program = ""
         try:
-            self.encoding = "\n".join(open(encoding_path).readlines())
+            encoding_program = "\n".join(open(encoding_path).readlines())
         except:
             print("Could not open problem file")
             exit(1)
 
         if instance_path != "":
             try:
-                self.instance = "\n".join(open(instance_path).readlines())
+                self.instance_program = "\n".join(open(instance_path).readlines())
             except:
                 print("Could not open instance file")
                 exit(1)        
         else:
-            self.instance = ""
-        self.programs_handler = ProgramsHandler(self.encoding, self.relaxed_solving)
+            self.instance_program = ""
+        self.programs_handler = ProgramsHandler(encoding_program, self.settings.relaxed_solving)
         self.assumptions = []
         self.last_model_symbols = None
         self.last_model_symbols_set = set()
@@ -62,38 +63,36 @@ class ASPQSolver:
         self.symbols_defined_in_p2 = dict()
         self.p1 = self.programs_handler.p1()
         self.p2 = self.programs_handler.p2()        
-        self.enumeration = True if n_models == 0 else False
-        self.n_models = n_models
         self.models_found = 0
         self.counterexample_found = 0
-        self.model_printer = PositiveModelPrinter() if not constraint_print else ConstraintModelPrinter()
-        self.logger = DebugLogger() if debug else ExecutionLogger()
+        self.model_printer = PositiveModelPrinter() if not self.settings.constraint_print else ConstraintModelPrinter()
+        self.logger = DebugLogger() if self.settings.debug else ExecutionLogger()
         self.exists_forall = self.programs_handler.split_rewriter.exists_forall()
 
     def ground(self):
         #solve directly
         #program is of the form \exists P_1 or \exists P_1 : C
-        if self.programs_handler.split_rewriter.program_type == ProgramType.EXISTS:
-            ctl_exists = clingo.Control([f"-n {self.n_models}"])
+        if self.programs_handler.split_rewriter.program_type == ASPQType.EXISTS:
+            ctl_exists = clingo.Control([f"-n {self.settings.n_models}"])
             ctl_exists.add("\n".join(self.p1.rules))
-            ctl_exists.add(self.instance)
+            ctl_exists.add(self.instance_program)
             ctl_exists.ground([("base", [])])
             with ctl_exists.solve(yield_=True) as handle:
                 for m in handle:
                     self.models_found += 1
                     print(m)
-                    if self.models_found == self.n_models:
+                    if self.models_found == self.settings.n_models:
                         self.exit_sat()
                     handle.get()
             if self.models_found == 0:
                 self.exit_unsat()
             else: # models are less than the desired number
                 self.exit_sat()
-        if self.programs_handler.split_rewriter.program_type == ProgramType.FORALL:
+        if self.programs_handler.split_rewriter.program_type == ASPQType.FORALL:
             ctl_forall = clingo.Control([])
             ctl_forall.add("\n".join(self.p1.rules))
             ctl_forall.add("\n".join(self.programs_handler.neg_c().rules))
-            ctl_forall.add(self.instance)
+            ctl_forall.add(self.instance_program)
             ctl_forall.ground([("base", [])])
             result =  ctl_forall.solve()
             if result.unsatisfiable:
@@ -103,19 +102,19 @@ class ASPQSolver:
 
 
         #ground relaxed programs
-        if self.relaxed_solving:
+        if self.settings.relaxed_solving:
             for program in self.programs_handler.relaxed_programs.values():
                 program_rules = "\n".join(program.rules)
                 self.logger.print(f"Adding program to relaxed programs ctl//\n {program_rules}//")
                 self.ctl_relaxed_programs.add(program_rules)
-            self.ctl_relaxed_programs.add(self.instance)
+            self.ctl_relaxed_programs.add(self.instance_program)
             self.ctl_relaxed_programs.ground([("base", [])])
             self.ctl_grounded = self.ctl_relaxed_programs
         else:
             
             self.ctl_grounded = self.ctl_p1
         self.ctl_p1.add("\n".join(self.programs_handler.original_programs[self.p1.program_type].rules))
-        self.ctl_p1.add(self.instance)
+        self.ctl_p1.add(self.instance_program)
         self.ctl_p1.ground()
         #consider only predicates appearing in the head of program P1
         #for constructing assumption(fixing the model of P1) and adding the model as constraint
@@ -146,7 +145,7 @@ class ASPQSolver:
         else:
             self.ctl_counter_example.add("\n".join(self.programs_handler.c().rules))
         #print(f"Added program neg C to counterexample control: //", "\n".join(self.programs_handler.flipped_constraint.rules), "//")
-        self.ctl_counter_example.add(self.instance)
+        self.ctl_counter_example.add(self.instance_program)
         self.ctl_counter_example.ground([("base", [])])
 
         for atom in self.ctl_counter_example.symbolic_atoms:
@@ -155,7 +154,7 @@ class ASPQSolver:
 
     def solve(self):
         result = None
-        if self.relaxed_solving:
+        if self.settings.relaxed_solving:
             result = self.ctl_relaxed_programs.solve(on_model=self.on_model, on_finish=self.finished_solve)
             if not self.last_model_symbols is None:
                 # no way to satisfy P1
@@ -171,7 +170,7 @@ class ASPQSolver:
                     self.models_found += 1
                     # print(f"Model {self.models_found}:")
                     self.print_projected_model()
-                    if self.models_found == self.n_models:
+                    if self.models_found == self.settings.n_models:
                         self.exit_sat()
                     else:
                         self.add_model_as_constraint()
@@ -197,11 +196,11 @@ class ASPQSolver:
         
         
         
-        while self.models_found != self.n_models or self.enumeration:
+        while self.models_found != self.settings.n_models or self.settings.enumeration:
             self.solve_once()
             result = self.ctl_p1.solve(on_model=self.on_model, on_finish=self.finished_solve)
             if result.unsatisfiable:
-                if self.n_models != 0:
+                if self.settings.n_models != 0:
                     self.exit_sat()
                 else:
                     self.exit_unsat()
@@ -228,7 +227,7 @@ class ASPQSolver:
                 
                 self.models_found += 1
                 #print(f"Model {self.models_found}:")
-                if self.models_found == self.n_models:
+                if self.models_found == self.settings.n_models:
                     self.exit_sat()
                 else:
                     #print("adding model as constraint after SAT")
