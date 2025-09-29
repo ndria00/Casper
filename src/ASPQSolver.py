@@ -32,25 +32,11 @@ class ASPQSolver:
     solving_level : int
     iteration : int
     
-    def __init__(self, encoding_path, instance_path, solver_settings) -> None:
+    def __init__(self, programs_handler, instance_program, solver_settings) -> None:
+        self.programs_handler = programs_handler
+        self.instance_program = instance_program
         self.settings = solver_settings
-        encoding_program = ""
-        try:
-            encoding_program = "\n".join(open(encoding_path).readlines())
-        except:
-            print("Could not open problem file")
-            exit(1)
-
-        if instance_path != "":
-            try:
-                self.instance_program = "\n".join(open(instance_path).readlines())
-            except:
-                print("Could not open instance file")
-                exit(1)        
-        else:
-            self.instance_program = ""
-        self.programs_handler = ProgramsHandler(encoding_program, self.settings.relaxed_solving)
-        self.program_levels = len(self.programs_handler.original_programs_list)-1
+        self.program_levels = len(self.programs_handler.original_programs_list) -1
         self.ctl_programs_list = [clingo.Control() for _ in range(self.program_levels)]
 
         self.assumptions = [[] for _ in range(self.program_levels +1)]
@@ -58,13 +44,12 @@ class ASPQSolver:
         self.last_model_symbols_sets = [set() for _ in range(self.program_levels +1)]
 
         self.refinement_rewriters = [None for _ in range(self.program_levels)]
-        # self.reduct_no_constraint_rewriters = [None for _ in range(self.program_levels)]
         self.symbols_defined_in_programs = dict()
         self.models_found = 0
         self.counterexample_found = 0
         self.model_printer = PositiveModelPrinter() if not self.settings.constraint_print else ConstraintModelPrinter()
         self.logger = self.settings.logger
-        self.exists_first = self.programs_handler.split_rewriter.exists_first()
+        self.exists_first = self.programs_handler.exists_first()
         self.iteration = 1
 
 
@@ -180,7 +165,7 @@ class ASPQSolver:
         for i in range(0, self.program_levels-1):
             to_rewrite_programs = []
             for j in range(i+1, self.program_levels):
-                to_rewrite_programs.append(self.programs_handler.original_programs_list[j])
+                to_rewrite_programs.append(self.programs_handler.p(j))
             
             #constraint programs are reversed since a refinement rewriter for \exists is actually rewriting in the \forall program
             #before and vice versa
