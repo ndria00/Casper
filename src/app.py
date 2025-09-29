@@ -15,5 +15,4 @@ def entrypoint():
     args = parser.parse_args()
     solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), bool(args.relaxed))
     solver  = ASPQSolver(args.problem, args.instance, solver_settings)
-    solver.ground()
-    solver.solve()
+    solver.solve_n_levels()

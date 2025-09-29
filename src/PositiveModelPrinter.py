@@ -1,8 +1,4 @@
-
-
-
 from .ModelPrinter import ModelPrinter
-
 
 class PositiveModelPrinter(ModelPrinter):
     def __init__(self):

@@ -19,8 +19,8 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
     suffix_p_literals : dict
     fail_literals : dict
 
-    def __init__(self, p2_predicates, constraints_program):
-        self.rewrite_predicates = constraints_program.head_predicates | p2_predicates
+    def __init__(self, to_rewrite_predicates, constraints_program):
+        self.rewrite_predicates = constraints_program.head_predicates | to_rewrite_predicates
         # print("REWRITE PREDICATES FOR C ", self.rewrite_predicates)
         self.constraints_program = constraints_program
         self.rewritten_program = ""

@@ -1,6 +1,3 @@
-
-
-import copy
 import clingo
 import clingo.ast
 

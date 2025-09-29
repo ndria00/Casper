@@ -1,6 +1,3 @@
-
-
-import copy
 import clingo
 import clingo.ast
 
@@ -47,5 +44,3 @@ class Rewriter(clingo.ast.Transformer):
     def reset(self):
         self.program = []
         self.head_predicates = set()
-
-
