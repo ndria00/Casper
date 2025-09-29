@@ -1,6 +1,3 @@
-
-
-import copy
 import clingo
 from clingo.ast import parse_string
 from .MyProgram import MyProgram
@@ -21,7 +18,6 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
 
     def __init__(self, to_rewrite_predicates, constraints_program):
         self.rewrite_predicates = constraints_program.head_predicates | to_rewrite_predicates
-        # print("REWRITE PREDICATES FOR C ", self.rewrite_predicates)
         self.constraints_program = constraints_program
         self.rewritten_program = ""
         self.placeholder_program = ""
@@ -32,10 +28,6 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
         self.rewritten_program = ""
         self.fail_atom_name = fail_atom_name
         self.rewritten_program = []
-        if iteration == 1:
-            parse_string("\n".join(self.constraints_program.rules), lambda stm: (self(stm)))
-            self.pattern_suffix_p = re.compile('|'.join(re.escape(k) for k in self.suffix_p_literals))
-            self.pattern_fail = re.compile('|'.join(re.escape(k) for k in self.fail_literals))
             
         self.rewritten_program = self.placeholder_program
         self.rewritten_program = self.pattern_suffix_p.sub(lambda a : self.suffix_p_literals[a.group(0)] + suffix_p, self.rewritten_program)
@@ -76,4 +68,8 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
 
         self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, new_head, rewritten_body)) + "\n"
 
-
+    def compute_placeholder_program(self):
+        self.fail_atom_name = "fail_"
+        parse_string("\n".join(self.constraints_program.rules), lambda stm: (self(stm)))
+        self.pattern_suffix_p = re.compile('|'.join(re.escape(k) for k in self.suffix_p_literals))
+        self.pattern_fail = re.compile('|'.join(re.escape(k) for k in self.fail_literals))

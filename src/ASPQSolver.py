@@ -188,7 +188,7 @@ class ASPQSolver:
                 to_rewrite_programs.append(self.programs_handler.c())
             else:
                 to_rewrite_programs.append(self.programs_handler.neg_c())
-            self.refinement_rewriters[i] = RefinementRewriter(to_rewrite_programs, self.programs_handler.c(), False)
+            self.refinement_rewriters[i] = RefinementRewriter(to_rewrite_programs, False)
             self.refinement_rewriters[i].compute_placeholder_program()
         
         self.ground_and_construct_choice_interfaces()
@@ -238,13 +238,14 @@ class ASPQSolver:
                 #add model M_1 of P_1 as assumption
                 self.assumptions[0] = []
                 prg = self.programs_handler.p(0)
+                self.logger.print("Searching for candiate")
                 result = self.ctl_programs_list[0].solve(on_model=self.on_model, on_finish=self.finished_solve)
-                
                 if result.unsatisfiable:
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
                     return True if self.programs_handler.last_exists() else False
                 else:
+                    self.logger.print(f"Found candiate {self.last_model_symbols_list}")
                     for symbol in self.symbols_defined_in_programs[prg.name].keys():
                         if symbol in self.last_model_symbols_sets[0] and symbol.name in prg.head_predicates:
                             self.assumptions[0].append((symbol, True))
