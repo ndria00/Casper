@@ -1,6 +1,9 @@
 from pathlib import Path
 import clingo
 
+from .SolverStatistics import SolverStatistics
+
+from .CounterexampleRewriter import CounterexampleRewriter
 from .RefinementRewriter import RefinementRewriter
 from .SolverSettings import SolverSettings
 from .MyProgram import ProgramQuantifier
@@ -12,126 +15,120 @@ from .ProgramsHandler import ProgramsHandler
 
 class ASPQSolver:
     programs_handler : ProgramsHandler
-    #for avoiding rewriting on facts
-    instance_program : str
-    ctl_programs_list : list
-    programs_models: list
+    ctl_move : clingo.Control
+    ctl_countermove : clingo.Control
     assumptions : list
-    symbols_defined_in_programs : dict
-    last_model_symbols_list : list
-    last_model_symbols_sets : list 
-    
-    refinement_rewriters : list
+    symbols_defined_in_first_program : dict
+    last_model : clingo.solving._SymbolSequence
+    last_model_symbols_set : set
+    refinement_rewriter : RefinementRewriter
+    counterexample_rewriter: CounterexampleRewriter
     models_found : int
     exists_first: bool
-    counterexample_found : int
     model_printer : ModelPrinter
     logger : MyLogger
     settings : SolverSettings
+    sub_solvers_settings : SolverSettings
     program_levels : int
-    solving_level : int
-    iteration : int
-    
-    def __init__(self, programs_handler, instance_program, solver_settings) -> None:
+    main_solver : bool
+    depth : int
+
+    def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
-        self.instance_program = instance_program
+        self.depth = depth
+        self.choice_str = ""
         self.settings = solver_settings
+        #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
+        #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
+        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation)
         self.program_levels = len(self.programs_handler.original_programs_list) -1
-        self.ctl_programs_list = [clingo.Control() for _ in range(self.program_levels)]
-
-        self.assumptions = [[] for _ in range(self.program_levels +1)]
-        self.last_model_symbols_list = [None for _ in range(self.program_levels +1)]
-        self.last_model_symbols_sets = [set() for _ in range(self.program_levels +1)]
-
-        self.refinement_rewriters = [None for _ in range(self.program_levels)]
-        self.symbols_defined_in_programs = dict()
+        self.ctl_move = clingo.Control()
+        self.ctl_countermove = clingo.Control()
+        self.assumptions = []
+        self.counterexample_rewriter = None
+        self.refinement_rewriter = None
         self.models_found = 0
-        self.counterexample_found = 0
         self.model_printer = PositiveModelPrinter() if not self.settings.constraint_print else ConstraintModelPrinter()
         self.logger = self.settings.logger
         self.exists_first = self.programs_handler.exists_first()
-        self.iteration = 1
-
+        self.main_solver = main_solver
+        if self.program_levels > 2:
+            #define counterexample and refinement solvers
+            self.counterexample_solver = None
+            self.refinement_solver =  None
+        self.last_model_symbols_set = set()
+        self.symbols_defined_in_first_program = dict()
 
     def ground_and_construct_choice_interfaces(self):
         choice = []
+        self.ctl_move = clingo.Control()
+        self.ctl_move.add(self.programs_handler.p(0).rules)
+        self.logger.print(f"Added choice to ctl move {self.choice_str}")
+        self.ctl_move.add(self.choice_str)
+        if self.programs_handler.instance != "":
+            self.ctl_move.add(self.programs_handler.instance)
         
         #1-ASP(Q) programs always have a constraint program - it is created without rules when a constraint program is not parsed
         if self.program_levels == 1:
-            self.ctl_programs_list[0].add("\n".join(self.programs_handler.p(0).rules))
-            self.logger.print(f"Added program {self.programs_handler.p(0).rules} to ctl 0")
             if self.programs_handler.last_exists():
-                self.logger.print(f"Added program {self.programs_handler.c().rules} to ctl 0")
-                self.ctl_programs_list[0].add("\n".join(self.programs_handler.c().rules))
+                self.logger.print(f"{self.depth * "\t"}Added program {self.programs_handler.c().rules} to ctl 0")
+                self.ctl_move.add(self.programs_handler.c().rules)
             else:
-                self.logger.print(f"Added program {self.programs_handler.neg_c().rules} to ctl 0")
-                self.ctl_programs_list[0].add("\n".join(self.programs_handler.neg_c().rules))
-            if self.instance_program != "":
-                self.ctl_programs_list[0].add(self.instance_program)
-            self.ctl_programs_list[0].ground()
-            self.logger.print("Grounded ctl 0")
-            prg = self.programs_handler.p(0)
-            head_predicates = prg.head_predicates
-            #find symbols defined in this program - those that have as predicate one among head_predicates
-            self.symbols_defined_in_programs[prg.name] = dict()
-            for atom in self.ctl_programs_list[0].symbolic_atoms:
-                if atom.symbol.name in head_predicates:
-                    self.symbols_defined_in_programs[prg.name][atom.symbol]=None
-            
+                self.logger.print(f"{self.depth * "\t"}Added program {self.programs_handler.neg_c().rules} to ctl 0")
+                self.ctl_move.add(self.programs_handler.neg_c().rules)
+            self.ctl_move.ground()
+            for atom in self.ctl_move.symbolic_atoms:
+                if atom.symbol.name in self.programs_handler.p(0).head_predicates:
+                    self.symbols_defined_in_first_program[atom.symbol] = None
+                    
+            self.logger.print(f"{self.depth * "\t"}Grounded ctl 0")        
             return
-        
-        for i in range(0, self.program_levels):
-            # add constraint program to counterexample ctl
-            if i == self.program_levels-1:
-                if self.programs_handler.last_exists():
-                    self.ctl_programs_list[i].add("\n".join(self.programs_handler.c().rules))
-                    self.logger.print(f"added to ctl {i} program: {"\n".join(self.programs_handler.c().rules)}")
-                else:
-                    self.logger.print(f"added to ctl {i} program: {"\n".join(self.programs_handler.neg_c().rules)}")
-                    self.ctl_programs_list[i].add("\n".join(self.programs_handler.neg_c().rules))
-            # add program P_i to ctl
-            self.ctl_programs_list[i].add("\n".join(self.programs_handler.p(i).rules))
-            self.logger.print(f"added to ctl {i} program: {"\n".join(self.programs_handler.p(i).rules)}")
-            if self.instance_program != "":
-                self.ctl_programs_list[i].add(self.instance_program)
-            self.ctl_programs_list[i].ground()
-            self.logger.print(f"Grounded ctl {i}")
+        else:
+            self.ctl_move.ground()
+            choice = []
             disjoint = True
-            prg = self.programs_handler.p(i)
-            head_predicates = prg.head_predicates
-            #find symbols defined in this program - those that have as predicate one among head_predicates
-            self.symbols_defined_in_programs[prg.name] = dict()
-            for atom in self.ctl_programs_list[i].symbolic_atoms:
-                if atom.symbol.name in head_predicates:
-                    self.symbols_defined_in_programs[prg.name][atom.symbol]=None
+            for atom in self.ctl_move.symbolic_atoms:
+                if atom.symbol.name in self.programs_handler.p(0).head_predicates:
+                    self.symbols_defined_in_first_program[atom.symbol] = None
                     choice.append(str(atom.symbol))
                     disjoint = False
+
             #add choice in the next program
             if not disjoint:
-                choice_str = ""
                 if len(choice) > 0:
-                    choice_str = ";".join(choice)
-                #last program adds no choice - there is no ctl next and it is the counterexample ctl
-                if i != self.program_levels-1:
-                    choice_str = "{"+ choice_str + "}."
-                    self.logger.print(f"added choice to ctl {i}: {choice_str}")
-                    self.ctl_programs_list[i+1].add(choice_str)
-    
+                    sub_choice_str = ";".join(choice) 
+                    sub_choice_str = "{"+ sub_choice_str + "}. "
+                    self.choice_str += sub_choice_str
+                    self.logger.print(f"{self.depth * "\t"}Constructed choice: {self.choice_str}")
+
+            if self.program_levels == 2:
+                self.ctl_countermove = clingo.Control()
+                self.logger.print(f"{self.depth * "\t"}added choice to countermove ctl: {self.choice_str}")
+                self.ctl_countermove.add(self.choice_str)
+                self.ctl_countermove.add(self.programs_handler.p(1).rules)
+                if self.programs_handler.last_exists():
+                    self.ctl_countermove.add(self.programs_handler.c().rules)
+                    self.logger.print(f"{self.depth * "\t"}added to countermove ctl program: {self.programs_handler.c().rules}")
+                else:
+                    self.logger.print(f"{self.depth * "\t"}added to countermove ctl program: {self.programs_handler.neg_c().rules}")
+                    self.ctl_countermove.add(self.programs_handler.neg_c().rules)
+                self.ctl_countermove.ground()
+
     def on_model(self, model):
-        self.last_model_symbols_list[self.solving_level] = model.symbols(shown=True)
+        self.last_model= model.symbols(shown=True)
 
     def finished_solve(self, result):
         if not result.unsatisfiable:
-            self.last_model_symbols_sets[self.solving_level].clear()
-            for symbol in self.last_model_symbols_list[self.solving_level]:
-                self.last_model_symbols_sets[self.solving_level].add(symbol)
+            self.last_model_symbols_set.clear()
+            for symbol in self.last_model:
+                self.last_model_symbols_set.add(symbol)
 
 
     #add quantified answer set as constraint for enabling enumeration        
     def add_model_as_constraint(self):
         constraint = ":-"
-        for symbol in self.symbols_defined_in_programs["1"].keys():
-            if symbol in self.last_model_symbols_sets[0]:
+        for symbol in self.symbols_defined_in_first_program.keys():
+            if symbol in self.last_model_symbols_set:
                 constraint += f"{symbol},"
 
             else:
@@ -139,75 +136,53 @@ class ASPQSolver:
 
         constraint = constraint[:-1]
         constraint += "."
-        self.logger.print(f"Adding constraint: {constraint}")
-        self.ctl_programs_list[0].add(f"constraint_{self.models_found}",[], constraint)
-        self.ctl_programs_list[0].ground([(f"constraint_{self.models_found}", [])])
-        
+        self.logger.print(f"{self.depth * "\t"}Adding constraint: {constraint}")
+        self.ctl_move.add(f"constraint_{self.models_found}",[], constraint)
+        self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
 
     def print_projected_model(self):
-        self.model_printer.print_model(self.last_model_symbols_sets[0], self.symbols_defined_in_programs["1"])
+        self.model_printer.print_model(self.last_model_symbols_set, self.symbols_defined_in_first_program)
         
-
-    def exit_sat(self):
-        if self.exists_first:
-            print(f"Models found: {self.models_found}")
-        self.logger.print(f"Counterexample found in the search: {self.counterexample_found}")
-        print("ASPQ SAT")
-        exit(10)
-    
-    def exit_unsat(self):
-        self.logger.print(f"Counterexample found in the search: {self.counterexample_found}")
-        print("ASPQ UNSAT")
-        exit(20)
-
     #solve function for ASPQ with n levels
-    def solve_n_levels(self):
-        for i in range(0, self.program_levels-1):
-            to_rewrite_programs = []
-            for j in range(i+1, self.program_levels):
-                to_rewrite_programs.append(self.programs_handler.p(j))
-            
-            #constraint programs are reversed since a refinement rewriter for \exists is actually rewriting in the \forall program
-            #before and vice versa
-            if self.programs_handler.p(i).program_type == ProgramQuantifier.EXISTS:
-                to_rewrite_programs.append(self.programs_handler.c())
-            else:
-                to_rewrite_programs.append(self.programs_handler.neg_c())
-            self.refinement_rewriters[i] = RefinementRewriter(to_rewrite_programs, False)
-            self.refinement_rewriters[i].compute_placeholder_program()
-        
+    def solve_n_levels(self, external_assumptions, choice_str):
+        SolverStatistics().aspq_solvers_calls += 1
+        self.choice_str = choice_str
+        self.external_assumptions = external_assumptions
+
         self.ground_and_construct_choice_interfaces()
-        
+
         while self.models_found < self.settings.n_models or self.settings.enumeration:
-            satisfiable = self.recursive_cegar(0)
+            satisfiable = self.recursive_cegar()
             if satisfiable:
                 if self.exists_first:
-                    self.print_projected_model()
                     self.models_found += 1
+                    if self.main_solver:
+                        self.print_projected_model()
+                        SolverStatistics().model_found()
+                        #empty model is unique if it exists - no other models can be
+                        if len(self.last_model) == 0:
+                            return True
                     if self.models_found == self.settings.n_models:
-                        self.exit_sat()
+                        return True
                     self.add_model_as_constraint()
                 else:
-                    self.exit_sat()
+                    return True
             else:
                 #program starts with forall and is unsat
                 if not self.exists_first:
-                    self.exit_unsat()
-                
+                    return False
+                                
                 #program starts with exists and therefore there might be models already found
                 #the exit code should depend also on these
                 if self.models_found > 0:
-                    self.exit_sat()
+                    return True
                 else:
-                    self.exit_unsat()
+                    return False
 
-
-    def recursive_cegar(self, i):
-        self.solving_level = i
-
+    def recursive_cegar(self):
         if self.program_levels == 1:
             # Program is \exists P_1:C or \forall P_1:C (with C possibly empty)
-            result = self.ctl_programs_list[0].solve(on_model=self.on_model, on_finish=self.finished_solve)
+            result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
             if result.unsatisfiable:
                 #exists looses if P_1 \cup C unsat
                 #forall wins if P_1 \cup \neg C unsat
@@ -219,104 +194,132 @@ class ASPQSolver:
         #\forall P_1 \exists P_2 : C
         elif self.program_levels == 2:
             while True:
-                self.solving_level = 0
                 #add model M_1 of P_1 as assumption
-                self.assumptions[0] = []
-                prg = self.programs_handler.p(0)
-                self.logger.print("Searching for candiate")
-                result = self.ctl_programs_list[0].solve(on_model=self.on_model, on_finish=self.finished_solve)
+                self.assumptions = []
+                self.logger.print(f"{self.depth * "\t"}Searching for candiate")
+                result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                 if result.unsatisfiable:
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
-                    return True if self.programs_handler.last_exists() else False
+                    return True if self.programs_handler.forall_first() else False
                 else:
-                    self.logger.print(f"Found candiate {self.last_model_symbols_list}")
-                    for symbol in self.symbols_defined_in_programs[prg.name].keys():
-                        if symbol in self.last_model_symbols_sets[0] and symbol.name in prg.head_predicates:
-                            self.assumptions[0].append((symbol, True))
-                        else:
-                            self.assumptions[0].append((symbol, False))
+                    self.logger.print(f"{self.depth * "\t"}Found candiate {self.last_model}")
+                    self.construct_assumptions()
                     #search for counterexample
-                    self.solving_level += 1
-                    self.logger.print(f"Searching for counterexample {self.assumptions[0]}")
-                    result = self.ctl_programs_list[1].solve(assumptions=self.assumptions[0], on_model=self.on_model, on_finish=self.finished_solve)
+                    self.logger.print(f"{self.depth * "\t"}Searching for counterexample")
+                    result = self.ctl_countermove.solve(assumptions=self.assumptions + self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                     
                     #winning move for the first quantifier - no recursive call for 2-ASPQ
                     if result.unsatisfiable:
-                        self.logger.print("No counterexample found")
+                        self.logger.print(f"{self.depth * "\t"}No counterexample found")
                         #forall wins if P_2 \cup \neg C has no sm
-                        #exists looses if P_2 \cup C has no sm 
+                        #exists looses if P_2 \cup C has no sm
                         return False if self.programs_handler.last_exists() else True
-                    self.logger.print("Counterexample found")
-                    rewriter = self.refinement_rewriters[self.solving_level-1]
-                    rewriter.rewrite(self.last_model_symbols_sets[1], self.iteration)
-                    # counterexample_facts = ""
-                    # for symbol in self.symbols_defined_in_programs[self.programs_handler.p(1).name].keys():
-                    #     if symbol in self.last_model_symbols_sets[1] and symbol.name in self.programs_handler.p(1).head_predicates:
-                    #         new_symbol = clingo.Function(symbol.name + rewriter.suffix_n, symbol.arguments, symbol.positive)
-                    #         counterexample_facts = counterexample_facts + str(new_symbol) + "."
-                    self.ctl_programs_list[0].add(f"iteration_{self.iteration}", [], rewriter.rewritten_program)
-                    self.logger.print(f"Result of refinement: {rewriter.rewritten_program}")
-                    self.ctl_programs_list[0].ground([(f"iteration_{self.iteration}", [])])
-                    self.iteration+=1
+                    self.logger.print(f"{self.depth * "\t"}Counterexample found {self.last_model}")
+                    SolverStatistics().conterexample_found += 1
+                    if self.refinement_rewriter is None:
+                        self.refinement_rewriter = RefinementRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                        self.refinement_rewriter.compute_placeholder_program()
+                    self.refinement_rewriter.rewrite(self.last_model, SolverStatistics().solvers_iterations)
+                    refine_program = self.refinement_rewriter.refined_program()
+                    self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
+                    self.logger.print(f"{self.depth * "\t"}Result of refinement: {refine_program}")
+                    self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+                    SolverStatistics().iteration_done()
         else:
-            self.logger.print(f"Inside recursive cegar at level {i}")
+            self.logger.print(f"{self.depth * "\t"}Inside recursive cegar for n-ASPQ with n >=3")
             while True:
-                if self.solving_level == self.program_levels:
-                    print("Called solve for last level")
-                    #search for CE
-                    #print(f"ASSUMPTIONS: {self.assumptions}")
-                    #search for counterexample
-                    #assumptions are the union of assumptions for all programs that appear before the program at the current level
-                    expanded_assumptions = [atom for assumpt in self.assumptions[0:self.solving_level] for atom in assumpt]
-                    print(f"Adding assumptions: {expanded_assumptions}")
-                    result = self.ctl_programs_list[len(self.ctl_programs_list) -1].solve(assumptions=expanded_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
-                    
-                    #no counterexample - winning move found
+                self.assumptions = []
+                if self.refinement_solver is None:
+                    #on the first iteration is just a solve on the outermost program
+                    result = self.ctl_move.solve(assumptions = self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                     if result.unsatisfiable:
-                        print("No counterexample")
-                        return True
-                    #refine abstraction
-                    else:
-                        print(f"Counterexample found: {self.last_model_symbols_list[i]}")
-                        self.ce_found = True
-                        return False
-                        # self.refine_abstractions()
+                        #no move, current quantifier looses
+                        return False if self.exists_first else True
+                    else: 
+                        self.logger.print(f"{self.depth * "\t"}Found candiate {self.last_model}")
+                        self.construct_assumptions()
                 else:
-                    print("Called solve for non-last level")
-                    #find model and construct assumptions
-                    #assumptions are the union of assumptions for all programs that appear before the program at the current level
-                    expanded_assumptions = [atom for assumpt in self.assumptions[0:self.solving_level] for atom in assumpt]
-                    print(f"Adding assumptions: {expanded_assumptions}")
-                    result = self.ctl_programs_list[self.solving_level].solve(assumptions=expanded_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
-                    #no candiate found - no candidate winning move and thus I need to refine
-                    if result.unsatisfiable:
-                        print("No candidate found")
-                        return False
-                    #candidate found
-                    else:
-                        print(f"Candidate found: {self.last_model_symbols_list[i]}")
-                        #clear assumptions for the current level
-                        self.assumptions[self.solving_level] = []
-                        prg = self.programs_handler.p(self.solving_level)
-                        for symbol in self.symbols_defined_in_programs[prg.name].keys():
-                            if symbol in self.last_model_symbols_sets[self.solving_level] and symbol.name in prg.head_predicates:
-                                self.assumptions[self.solving_level].append((symbol, True))
-                            else:
-                                self.assumptions[self.solving_level].append((symbol, False))
-                        res = self.recursive_cegar(i+1)
-                        self.solving_level = i
-                        #winning move for the next quantifier
-                        if not res: 
-                            print(f"No winning move for the {i+1} quantifier")
-                            return True
+                    if self.program_levels > 3:
+                        satisfiable = self.refinement_solver.solve_n_levels(self.external_assumptions, self.choice_str)
+                        SolverStatistics().aspq_solvers_calls += 1
+                                                
+                        if not satisfiable:
+                            return False if self.exists_first else True
                         else:
-                            print(f"Winning move for the {i+1} quantifier, I have to search for another candidate")
-                            self.refine_abstractions()
+                            self.refinement_rewriter.construct_assumptions()
+                            self.logger.print(f"{self.depth * "\t"}Found candiate {self.last_model}")
+                    else:
+                        result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
+                        if result.unsatisfiable:
+                            return False if self.exists_first else True
+                        else:
+                            self.logger.print(f"{self.depth * "\t"}{self.depth * "\t"}Found candiate {self.last_model}")
 
+
+                if self.counterexample_rewriter is None:
+                    self.counterexample_rewriter = CounterexampleRewriter(self.programs_handler.original_programs_list[1:len(self.programs_handler.original_programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c())
+                
+                self.counterexample_rewriter.rewrite(self.last_model, self.symbols_defined_in_first_program, self.programs_handler.p(0).head_predicates)
+                #this is always an ASPQ program with two or more levels
+                ce_programs_handler = ProgramsHandler(self.counterexample_rewriter.rewritten_program(), self.programs_handler.instance)
+                self.counterexample_solver = ASPQSolver(ce_programs_handler, self.sub_solvers_settings, False, self.depth +1)
+                
+                self.construct_assumptions()
+                satisfiable = self.counterexample_solver.solve_n_levels(self.external_assumptions + self.assumptions, self.choice_str)
+                
+                #no counterexample
+                if not satisfiable and self.programs_handler.forall_first():
+                    return False
                     
-    def refine_abstractions(self):
-        self.refinement_rewriters[self.solving_level].rewrite()
-        self.iteration += 1
-        
-        
+                if not satisfiable and self.programs_handler.exists_first():
+                    return True
+                
+                #a counterexample was found
+                SolverStatistics().aspq_solvers_calls += 1
+                if self.refinement_rewriter is None:
+                    self.refinement_rewriter = RefinementRewriter(self.programs_handler.original_programs_list[1:len(self.programs_handler.original_programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                    self.refinement_rewriter.compute_placeholder_program()
+                self.refinement_rewriter.rewrite(self.counterexample_solver.last_model, SolverStatistics().solvers_iterations)
+                #program with potentially first quantifiers collapsed and the or applied to remaining quantifiers (and also C)
+                refinement = self.refinement_rewriter.refined_program()
+                
+                #refinement is an ASP program and can be directly added to the ctl_move
+                if type(refinement) == str:
+                    self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refinement)
+                    self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+                else: #refinement is an ASPQ
+                    if self.refinement_solver == None:
+                        refinement_handler =  ProgramsHandler(refinement, self.programs_handler.instance)
+                        #add rules from P_1 into refinement which containts only programs from P_2
+                        refinement[0].rules += self.programs_handler.p(0).rules
+                        self.refinement_solver = ASPQSolver(refinement_handler, self.sub_solvers_settings, False, self.depth +1)
+                    else:
+                        assert len(refinement_handler.original_programs_list) == len(self.refinement_solver.programs_handler.original_programs_list)
+                        #update programs handler of of refinement_solver by extending programs with result of refinement
+                        for i in range(len(refinement_handler.original_programs_list)):
+                            self.refinement_solver.programs_handler.original_programs_list[i].rules += refinement_handler.original_programs_list[i].rules
+                SolverStatistics().iteration_done()
+                
+    def construct_assumptions(self):
+        self.assumptions = []
+        for symbol in self.symbols_defined_in_first_program.keys():
+            if symbol in self.last_model_symbols_set and symbol.name in self.programs_handler.p(0).head_predicates:
+                self.assumptions.append((symbol, True))
+            else:
+                self.assumptions.append((symbol, False))
+
+    def extend_with_refinement(self, refinement):
+        assert not self.ctl_move is None
+        # self.ctl_move.add(f"refinement_{SolverStatistics().solvers_iterations}", [], self.programs_handler.p(0))
+        #eachh solver has a move ctl. If I 
+        #If |\Pi| = 10, then ref(\Pi, M_1) [P_1 \cup P_2^{M_2} \cup P_3^{v}, \box_1 P_4, box_2 P_5, ..., \box_j P_{10}^{v} : C^*]
+        #
+        if not self.refinement_solver is None:
+            self.refinement_solver.extend_control(refinement[1::])
+        else: #reached ASPQ program of length 2
+            assert self.program_levels == 2
+            #adding refinement for 2-ASPQ which should add 
+            refinement_rules = refinement[0].rules + refinement[1].rules
+            self.ctl_countermove.add(f"refinement_{SolverStatistics().solvers_iterations}", [], )
+

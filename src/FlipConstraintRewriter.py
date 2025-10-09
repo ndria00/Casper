@@ -17,7 +17,7 @@ class FlipConstraintRewriter(Rewriter):
         head  = node.head
         if head.ast_type == clingo.ast.ASTType.Literal:
             if not head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
-                self.extract_predicate_from_literal(head)         
+                self.extract_predicate_from_literal(head)
             else:
                 #head of constraints end up here
                 self.program.append(str(clingo.ast.Rule(node.location, self.unsat_atom, node.body)))
