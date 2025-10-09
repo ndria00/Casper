@@ -32,10 +32,12 @@ class ASPQSolver:
     program_levels : int
     main_solver : bool
     depth : int
+    output_pad :str
 
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
         self.depth = depth
+        self.output_pad = self.depth * '\t'
         self.choice_str = ""
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
@@ -71,17 +73,17 @@ class ASPQSolver:
         #1-ASP(Q) programs always have a constraint program - it is created without rules when a constraint program is not parsed
         if self.program_levels == 1:
             if self.programs_handler.last_exists():
-                self.logger.print(f"{self.depth * '\t'}Added program {self.programs_handler.c().rules} to ctl 0")
+                self.logger.print(f"{self.output_pad}Added program {self.programs_handler.c().rules} to ctl 0")
                 self.ctl_move.add(self.programs_handler.c().rules)
             else:
-                self.logger.print(f"{self.depth * '\t'}Added program {self.programs_handler.neg_c().rules} to ctl 0")
+                self.logger.print(f"{self.output_pad}Added program {self.programs_handler.neg_c().rules} to ctl 0")
                 self.ctl_move.add(self.programs_handler.neg_c().rules)
             self.ctl_move.ground()
             for atom in self.ctl_move.symbolic_atoms:
                 if atom.symbol.name in self.programs_handler.p(0).head_predicates:
                     self.symbols_defined_in_first_program[atom.symbol] = None
                     
-            self.logger.print(f"{self.depth * '\t'}Grounded ctl 0")        
+            self.logger.print(f"{self.output_pad}Grounded ctl 0")        
             return
         else:
             self.ctl_move.ground()
@@ -99,18 +101,18 @@ class ASPQSolver:
                     sub_choice_str = ";".join(choice) 
                     sub_choice_str = "{"+ sub_choice_str + "}. "
                     self.choice_str += sub_choice_str
-                    self.logger.print(f"{self.depth * '\t'}Constructed choice: {self.choice_str}")
+                    self.logger.print(f"{self.output_pad}Constructed choice: {self.choice_str}")
 
             if self.program_levels == 2:
                 self.ctl_countermove = clingo.Control()
-                self.logger.print(f"{self.depth * '\t'}added choice to countermove ctl: {self.choice_str}")
+                self.logger.print(f"{self.output_pad}added choice to countermove ctl: {self.choice_str}")
                 self.ctl_countermove.add(self.choice_str)
                 self.ctl_countermove.add(self.programs_handler.p(1).rules)
                 if self.programs_handler.last_exists():
                     self.ctl_countermove.add(self.programs_handler.c().rules)
-                    self.logger.print(f"{self.depth * '\t'}added to countermove ctl program: {self.programs_handler.c().rules}")
+                    self.logger.print(f"{self.output_pad}added to countermove ctl program: {self.programs_handler.c().rules}")
                 else:
-                    self.logger.print(f"{self.depth * '\t'}added to countermove ctl program: {self.programs_handler.neg_c().rules}")
+                    self.logger.print(f"{self.output_pad}added to countermove ctl program: {self.programs_handler.neg_c().rules}")
                     self.ctl_countermove.add(self.programs_handler.neg_c().rules)
                 self.ctl_countermove.ground()
 
@@ -136,7 +138,7 @@ class ASPQSolver:
 
         constraint = constraint[:-1]
         constraint += "."
-        self.logger.print(f"{self.depth * '\t'}Adding constraint: {constraint}")
+        self.logger.print(f"{self.output_pad}Adding constraint: {constraint}")
         self.ctl_move.add(f"constraint_{self.models_found}",[], constraint)
         self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
 
@@ -196,26 +198,26 @@ class ASPQSolver:
             while True:
                 #add model M_1 of P_1 as assumption
                 self.assumptions = []
-                self.logger.print(f"{self.depth * '\t'}Searching for candiate")
+                self.logger.print(f"{self.output_pad}Searching for candiate")
                 result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                 if result.unsatisfiable:
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
                     return True if self.programs_handler.forall_first() else False
                 else:
-                    self.logger.print(f"{self.depth * '\t'}Found candiate {self.last_model}")
+                    self.logger.print(f"{self.output_pad}Found candiate {self.last_model}")
                     self.construct_assumptions()
                     #search for counterexample
-                    self.logger.print(f"{self.depth * '\t'}Searching for counterexample")
+                    self.logger.print(f"{self.output_pad}Searching for counterexample")
                     result = self.ctl_countermove.solve(assumptions=self.assumptions + self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                     
                     #winning move for the first quantifier - no recursive call for 2-ASPQ
                     if result.unsatisfiable:
-                        self.logger.print(f"{self.depth * '\t'}No counterexample found")
+                        self.logger.print(f"{self.output_pad}No counterexample found")
                         #forall wins if P_2 \cup \neg C has no sm
                         #exists looses if P_2 \cup C has no sm
                         return False if self.programs_handler.last_exists() else True
-                    self.logger.print(f"{self.depth * '\t'}Counterexample found {self.last_model}")
+                    self.logger.print(f"{self.output_pad}Counterexample found {self.last_model}")
                     SolverStatistics().conterexample_found += 1
                     if self.refinement_rewriter is None:
                         self.refinement_rewriter = RefinementRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
@@ -223,11 +225,11 @@ class ASPQSolver:
                     self.refinement_rewriter.rewrite(self.last_model, SolverStatistics().solvers_iterations)
                     refine_program = self.refinement_rewriter.refined_program()
                     self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
-                    self.logger.print(f"{self.depth * '\t'}Result of refinement: {refine_program}")
+                    self.logger.print(f"{self.output_pad}Result of refinement: {refine_program}")
                     self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
                     SolverStatistics().iteration_done()
         else:
-            self.logger.print(f"{self.depth * '\t'}Inside recursive cegar for n-ASPQ with n >=3")
+            self.logger.print(f"{self.output_pad}Inside recursive cegar for n-ASPQ with n >=3")
             while True:
                 self.assumptions = []
                 if self.refinement_solver is None:
@@ -237,7 +239,7 @@ class ASPQSolver:
                         #no move, current quantifier looses
                         return False if self.exists_first else True
                     else: 
-                        self.logger.print(f"{self.depth * '\t'}Found candiate {self.last_model}")
+                        self.logger.print(f"{self.output_pad}Found candiate {self.last_model}")
                         self.construct_assumptions()
                 else:
                     if self.program_levels > 3:
@@ -248,13 +250,13 @@ class ASPQSolver:
                             return False if self.exists_first else True
                         else:
                             self.refinement_rewriter.construct_assumptions()
-                            self.logger.print(f"{self.depth * '\t'}Found candiate {self.last_model}")
+                            self.logger.print(f"{self.output_pad}Found candiate {self.last_model}")
                     else:
                         result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_model, on_finish=self.finished_solve)
                         if result.unsatisfiable:
                             return False if self.exists_first else True
                         else:
-                            self.logger.print(f"{self.depth * '\t'}{self.depth * '\t'}Found candiate {self.last_model}")
+                            self.logger.print(f"{self.output_pad}Found candiate {self.last_model}")
 
 
                 if self.counterexample_rewriter is None:
