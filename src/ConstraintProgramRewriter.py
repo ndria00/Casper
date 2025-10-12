@@ -11,6 +11,7 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
     constraints_program : MyProgram
     rewritten_program : str
     placeholder_program : str
+    placeholder_program_rules : list
     rewrite_predicates : set
     fail_atom_name : str
     suffix_p_literals : dict
@@ -21,6 +22,7 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
         self.constraints_program = constraints_program
         self.rewritten_program = ""
         self.placeholder_program = ""
+        self.placeholder_program_rules = []
         self.suffix_p_literals = dict()
         self.fail_literals = dict()
 
@@ -67,12 +69,15 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
         fail_lit = clingo.ast.Literal(node.location, clingo.ast.Sign.Negation, clingo.ast.SymbolicAtom(fail_func))
         rewritten_body.append(fail_lit)
 
-        self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, new_head, rewritten_body)) + "\n"
+        self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
 
     def compute_placeholder_program(self):
         if self.placeholder_program != "":
             return
         self.fail_atom_name = "fail_"
+        self.placeholder_program_rules = []
         parse_string(self.constraints_program.rules, lambda stm: (self(stm)))
+        self.placeholder_program = "\n".join(self.placeholder_program_rules)
+        self.placeholder_program_rules = []
         self.pattern_suffix_p = re.compile('|'.join(re.escape(k) for k in self.suffix_p_literals))
         self.pattern_fail = re.compile('|'.join(re.escape(k) for k in self.fail_literals))

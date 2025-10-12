@@ -30,12 +30,14 @@ class RefinementRewriter(clingo.ast.Transformer):
     fail_atom_name : str
     ground_transformation : bool
     placeholder_program : str
+    placeholder_program_rules : list
     parsing_first_program: bool
     to_rewrite_predicates : set
 
     def __init__(self, original_programs, prorgam_c, program_neg_c, ground_transformation):
         self.original_programs_list = original_programs
         self.placeholder_programs_list_rules = []
+        self.placeholder_program_rules = []
         self.rewritten_programs_list_rules = ["" for _ in range(len(self.original_programs_list))]
         self.rewritten_programs_list = []
         self.ground_transformation = ground_transformation
@@ -231,16 +233,16 @@ class RefinementRewriter(clingo.ast.Transformer):
 
                     self.suffix_n_literals[self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N] = node.head.atom.symbol.name #self.suffix_n
                     f_2 = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N, node.head.atom.symbol.arguments, False)
-                    l_1 = clingo.ast.Literal(node.location, False, f_1)
-                    l_2 = clingo.ast.Literal(node.location, True, f_2)
+                    #l_1 = clingo.ast.Literal(node.location, False, f_1)
+                    #l_2 = clingo.ast.Literal(node.location, True, f_2)
                     self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
                     fail_head = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
-                    fail_body = [l_1, l_2]
-                    self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, fail_head, fail_body)) + "\n"
+                    #fail_body = [l_1, l_2]
+                    #self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, fail_head, fail_body)) + "\n"
                     nl_1 = clingo.ast.Literal(node.location, True, f_1)
                     nl_2 = clingo.ast.Literal(node.location, False, f_2)
                     fail_body = [nl_1, nl_2]
-                    self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, fail_head, fail_body)) + "\n"
+                    self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
                 except:
                     print("Usupported head")
                     exit(1)
@@ -249,7 +251,7 @@ class RefinementRewriter(clingo.ast.Transformer):
             new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
             new_head = clingo.ast.SymbolicAtom(new_term)
 
-        self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, new_head, rewritten_body)) + "\n"
+        self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
     
 
 
@@ -261,8 +263,10 @@ class RefinementRewriter(clingo.ast.Transformer):
             #for first program the rewriter must do the reduct while for the others it should do just the or
             #and rewrite all the predicates from the first program over the + signature
             self.parsing_first_program = True if i == 0 else False
-            self.placeholder_program = ""
+            self.placeholder_program_rules = []
             parse_string(program.rules, lambda stm: (self(stm)))
+            self.placeholder_program = "\n".join(self.placeholder_program_rules)
+            self.placeholder_program_rules = []
             if not self.ground_transformation:
                 self.placeholder_programs_list_rules.append(self.placeholder_program)
             else:
