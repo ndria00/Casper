@@ -147,7 +147,7 @@ class ASPQSolver:
         
     #solve function for ASPQ with n levels
     def solve_n_levels(self, external_assumptions, choice_str):
-        SolverStatistics().aspq_solvers_calls += 1
+        SolverStatistics().iteration_done()
         self.choice_str = choice_str
         self.external_assumptions = external_assumptions
 
@@ -168,6 +168,8 @@ class ASPQSolver:
                         return True
                     self.add_model_as_constraint()
                 else:
+                    if self.main_solver:
+                        SolverStatistics().model_found()
                     return True
             else:
                 #program starts with forall and is unsat
@@ -218,7 +220,7 @@ class ASPQSolver:
                         #exists looses if P_2 \cup C has no sm
                         return False if self.programs_handler.last_exists() else True
                     self.logger.print(f"{self.output_pad}Counterexample found {self.last_model}")
-                    SolverStatistics().conterexample_found += 1
+                    SolverStatistics().counterexample_found()
                     if self.refinement_rewriter is None:
                         self.refinement_rewriter = RefinementRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                         self.refinement_rewriter.compute_placeholder_program()
@@ -244,7 +246,7 @@ class ASPQSolver:
                 else:
                     if self.program_levels > 3:
                         satisfiable = self.refinement_solver.solve_n_levels(self.external_assumptions, self.choice_str)
-                        SolverStatistics().aspq_solvers_calls += 1
+                        SolverStatistics().iteration_done()
                                                 
                         if not satisfiable:
                             return False if self.exists_first else True
@@ -262,14 +264,16 @@ class ASPQSolver:
                 if self.counterexample_rewriter is None:
                     self.counterexample_rewriter = CounterexampleRewriter(self.programs_handler.original_programs_list[1:len(self.programs_handler.original_programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c())
                 
-                self.counterexample_rewriter.rewrite(self.last_model, self.symbols_defined_in_first_program, self.programs_handler.p(0).head_predicates)
+                self.counterexample_rewriter.rewrite(self.last_model_symbols_set, self.symbols_defined_in_first_program, self.programs_handler.p(0).head_predicates)
                 #this is always an ASPQ program with two or more levels
                 ce_programs_handler = ProgramsHandler(self.counterexample_rewriter.rewritten_program(), self.programs_handler.instance)
                 self.counterexample_solver = ASPQSolver(ce_programs_handler, self.sub_solvers_settings, False, self.depth +1)
-                
+
                 self.construct_assumptions()
                 satisfiable = self.counterexample_solver.solve_n_levels(self.external_assumptions + self.assumptions, self.choice_str)
                 
+                if satisfiable:
+                    SolverStatistics().counterexample_found()
                 #no counterexample
                 if not satisfiable and self.programs_handler.forall_first():
                     return False
@@ -278,14 +282,14 @@ class ASPQSolver:
                     return True
                 
                 #a counterexample was found
-                SolverStatistics().aspq_solvers_calls += 1
+                SolverStatistics().iteration_done()
                 if self.refinement_rewriter is None:
                     self.refinement_rewriter = RefinementRewriter(self.programs_handler.original_programs_list[1:len(self.programs_handler.original_programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                     self.refinement_rewriter.compute_placeholder_program()
                 self.refinement_rewriter.rewrite(self.counterexample_solver.last_model, SolverStatistics().solvers_iterations)
                 #program with potentially first quantifiers collapsed and the or applied to remaining quantifiers (and also C)
                 refinement = self.refinement_rewriter.refined_program()
-                
+
                 #refinement is an ASP program and can be directly added to the ctl_move
                 if type(refinement) == str:
                     self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refinement)
@@ -310,18 +314,3 @@ class ASPQSolver:
                 self.assumptions.append((symbol, True))
             else:
                 self.assumptions.append((symbol, False))
-
-    def extend_with_refinement(self, refinement):
-        assert not self.ctl_move is None
-        # self.ctl_move.add(f"refinement_{SolverStatistics().solvers_iterations}", [], self.programs_handler.p(0))
-        #eachh solver has a move ctl. If I 
-        #If |\Pi| = 10, then ref(\Pi, M_1) [P_1 \cup P_2^{M_2} \cup P_3^{v}, \box_1 P_4, box_2 P_5, ..., \box_j P_{10}^{v} : C^*]
-        #
-        if not self.refinement_solver is None:
-            self.refinement_solver.extend_control(refinement[1::])
-        else: #reached ASPQ program of length 2
-            assert self.program_levels == 2
-            #adding refinement for 2-ASPQ which should add 
-            refinement_rules = refinement[0].rules + refinement[1].rules
-            self.ctl_countermove.add(f"refinement_{SolverStatistics().solvers_iterations}", [], )
-

@@ -13,13 +13,17 @@ class SolverStatistics:
     def __init__(self):
         pass
 
+    def counterexample_found(self):
+        self.conterexample_found+=1
+
     def model_found(self):
-        self._instance.models_found += 1
+        self.models_found += 1
 
     def iteration_done(self):
         self.solvers_iterations +=1
 
     def print_statistics(self):
-        print(f"Models found {self._instance.models_found}")
-        print(f"ASPQ solvers calls {self._instance.aspq_solvers_calls}")
-        print(f"Counterexample found {self._instance.conterexample_found}")
+        print(f"Models found {self.models_found}")
+        print(f"ASPQ solvers calls {self.solvers_iterations}")
+        print(f"Counterexample found {self.conterexample_found}")
+
