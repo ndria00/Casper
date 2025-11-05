@@ -3,7 +3,7 @@ import copy
 import clingo
 
 from .ConstraintProgramRewriter import ConstraintProgramRewriter
-from .MyProgram import MyProgram, ProgramQuantifier
+from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
 from clingo.ast import parse_string
 import re
 
@@ -120,14 +120,14 @@ class RefinementRewriter(clingo.ast.Transformer):
             for pred in self.original_programs_list[i].head_predicates:
                 rewritten_preds.add(f"{pred}{self.suffix_p}")
 
-            self.rewritten_programs_list.append(MyProgram(self.rewritten_programs_list_rules[i], quantifier, prg_name, rewritten_preds))
+            self.rewritten_programs_list.append(QuantifiedProgram(self.rewritten_programs_list_rules[i], quantifier, prg_name, rewritten_preds))
            
         #add rewritten constraint program
         prg_name = self.original_programs_list[-1].name
         rewritten_preds = set()
         for pred in self.original_programs_list[-1].head_predicates:
             rewritten_preds.add(f"{pred}{self.suffix_p}")
-        self.rewritten_programs_list.append(MyProgram(self.constraint_program_rewriter.rewritten_program, ProgramQuantifier.CONSTRAINTS, prg_name, rewritten_preds))
+        self.rewritten_programs_list.append(QuantifiedProgram(self.constraint_program_rewriter.rewritten_program, ProgramQuantifier.CONSTRAINTS, prg_name, rewritten_preds))
         
            
         self.counterexample_facts = " "
@@ -155,7 +155,7 @@ class RefinementRewriter(clingo.ast.Transformer):
                 refinement_str += self.rewritten_programs_list[i].rules
                 head_predicates = head_predicates | self.rewritten_programs_list[i].head_predicates
 
-            refinement_aspq.append(MyProgram(refinement_str, ProgramQuantifier.EXISTS, "1", head_predicates))
+            refinement_aspq.append(QuantifiedProgram(refinement_str, ProgramQuantifier.EXISTS, "1", head_predicates))
             
             for i in range(2, len(self.rewritten_programs_list)):
                 #the third program has name 4 since 1 is not in the original list

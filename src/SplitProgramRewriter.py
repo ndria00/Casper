@@ -1,6 +1,6 @@
 import re
 import clingo
-from .MyProgram import MyProgram, ProgramQuantifier
+from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
 from .Rewriter import Rewriter
 from enum import Enum
 from clingo.ast import parse_string
@@ -8,7 +8,7 @@ import sys
 
 
 class SplitProgramRewriter(Rewriter):
-    programs: list[MyProgram]
+    programs: list[QuantifiedProgram]
     rules : list[str]
     cur_program_quantifier : ProgramQuantifier
     curr_program_name : str
@@ -75,7 +75,7 @@ class SplitProgramRewriter(Rewriter):
             if not re.search(r'fail_\d+|unsat_c', program_str) is None:
                 print("Predicate names and constants of the form fail_\\d+ or unsat_c are not allowed... Exiting")
                 sys.exit(1)
-            program = MyProgram("\n".join(self.cur_program_rules), self.cur_program_quantifier, self.curr_program_name, self.head_predicates)
+            program = QuantifiedProgram("\n".join(self.cur_program_rules), self.cur_program_quantifier, self.curr_program_name, self.head_predicates)
             self.programs.append(program)
             self.program_is_open = False
         self.cur_program_rules = []

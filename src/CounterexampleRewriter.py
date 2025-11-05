@@ -1,10 +1,10 @@
-from .MyProgram import MyProgram, ProgramQuantifier
+from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
 
 #Takes P_2, ..., P_n : C as programs
 #flips quantifiers and constraint if the first program is \exists (i.e. the outermost program was a \forall)
 class CounterexampleRewriter:
-    constraint_program : MyProgram
-    negated_constraint_program : MyProgram
+    constraint_program : QuantifiedProgram
+    negated_constraint_program : QuantifiedProgram
     original_programs_list : list
     rewritten_programs_list : list
     flip_quantifier_and_constraint: bool
@@ -42,7 +42,7 @@ class CounterexampleRewriter:
                 else:
                     quantifier = self.original_programs_list[i].program_type
                 prg = self.original_programs_list[i]
-                self.rewritten_programs_list.append(MyProgram(prg.rules, quantifier, prg.name, prg.head_predicates))        
+                self.rewritten_programs_list.append(QuantifiedProgram(prg.rules, quantifier, prg.name, prg.head_predicates))        
             if self.flip_quantifier_and_constraint:
                 self.rewritten_programs_list.append(self.negated_constraint_program)
             else:

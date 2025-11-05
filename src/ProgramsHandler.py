@@ -1,6 +1,6 @@
 from clingo.ast import parse_string
 from .FlipConstraintRewriter import FlipConstraintRewriter
-from .MyProgram import MyProgram, ProgramQuantifier
+from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
 from enum import Enum
 
 class ASPQType(str, Enum):
@@ -12,14 +12,14 @@ class ProgramsHandler:
     encoding : str
     instance : str
     original_programs_list : list
-    flipped_constraint : MyProgram
+    flipped_constraint : QuantifiedProgram
     program_type : ASPQType
 
     def flip_constraint(self):
         flipConstraintRewriter = FlipConstraintRewriter(f"unsat_c{len(self.original_programs_list)}")
         constraint_program = self.original_programs_list[len(self.original_programs_list)-1]
         parse_string(constraint_program.rules, lambda stm: (flipConstraintRewriter(stm)))
-        self.flipped_constraint = MyProgram(rules="\n".join(flipConstraintRewriter.program), program_type=ProgramQuantifier.CONSTRAINTS, program_name=constraint_program.name, head_predicates=flipConstraintRewriter.head_predicates) 
+        self.flipped_constraint = QuantifiedProgram(rules="\n".join(flipConstraintRewriter.program), program_type=ProgramQuantifier.CONSTRAINTS, program_name=constraint_program.name, head_predicates=flipConstraintRewriter.head_predicates) 
 
     def p(self, idx):
         if idx < 0 or idx >= len(self.original_programs_list):
@@ -47,7 +47,7 @@ class ProgramsHandler:
         self.compute_program_type()
         #add empty constraint program if no constraint program was parsed
         if self.original_programs_list[len(self.original_programs_list)-1].program_type != ProgramQuantifier.CONSTRAINTS:
-            self.original_programs_list.append(MyProgram("", ProgramQuantifier.CONSTRAINTS, "c", set()))
+            self.original_programs_list.append(QuantifiedProgram("", ProgramQuantifier.CONSTRAINTS, "c", set()))
         self.flip_constraint()
 
 

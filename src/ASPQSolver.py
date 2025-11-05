@@ -6,7 +6,7 @@ from .SolverStatistics import SolverStatistics
 from .CounterexampleRewriter import CounterexampleRewriter
 from .RefinementRewriter import RefinementRewriter
 from .SolverSettings import SolverSettings
-from .MyProgram import ProgramQuantifier
+from .QuantifiedProgram import ProgramQuantifier
 from .ConstraintModelPrinter import ConstraintModelPrinter
 from .ModelPrinter import ModelPrinter
 from .MyLogger import MyLogger

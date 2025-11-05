@@ -1,6 +1,6 @@
 import clingo
 from clingo.ast import parse_string
-from .MyProgram import MyProgram
+from .QuantifiedProgram import QuantifiedProgram
 import re
 
 class ConstraintProgramRewriter(clingo.ast.Transformer):
@@ -8,7 +8,7 @@ class ConstraintProgramRewriter(clingo.ast.Transformer):
     ANNOTATION_CLOSE_P : str = ">>"
     ANNOTATION_OPEN_F : str = ">>"
     ANNOTATION_CLOSE_F : str = "<<"
-    constraints_program : MyProgram
+    constraints_program : QuantifiedProgram
     rewritten_program : str
     placeholder_program : str
     placeholder_program_rules : list
