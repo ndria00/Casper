@@ -1,5 +1,7 @@
 import re
 import clingo
+
+from .WeakConstraint import WeakConstraint
 from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
 from .Rewriter import Rewriter
 from enum import Enum
@@ -12,6 +14,7 @@ class SplitProgramRewriter(Rewriter):
     rules : list[str]
     cur_program_quantifier : ProgramQuantifier
     curr_program_name : str
+    curr_weak_constraints : list
     program_is_open : bool
     encoding_program : str
 
@@ -19,23 +22,25 @@ class SplitProgramRewriter(Rewriter):
         super().__init__()
         self.programs = []
         self.cur_program_rules = []
+        self.curr_weak_constraints = []
         self.cur_program_quantifier = ProgramQuantifier.CONSTRAINTS
         self.curr_program_name = "c"
         self.program_is_open = False
         self.constraint_program = None
         self.encoding_program = encoding_program
+        self.optimization_program = False
         parse_string(encoding_program, lambda stm: (self(stm)))
         self.closed_program()
-        self.print_program_types()
+        if self.programs[len(self.programs)-1].program_type != ProgramQuantifier.CONSTRAINTS:
+            self.programs.append(QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set()))
 
     def visit_Comment(self, value):
         value_str = str(value)
         is_exist_directive = not re.match("%@exists", value_str) is None
         is_forall_directive = not re.match("%@forall", value_str) is None
         is_constraint_directive = not re.match("%@constraint", value_str) is None
-        #when an exists directive is found after another exists directive the programs are merged toghether
-        #same reasoning for forall
-        if (is_exist_directive and self.cur_program_quantifier != ProgramQuantifier.EXISTS) or (is_forall_directive and self.cur_program_quantifier != ProgramQuantifier.FORALL) or is_constraint_directive: 
+
+        if is_exist_directive or is_forall_directive or is_constraint_directive:
             self.closed_program()
     
         if is_exist_directive:
@@ -75,10 +80,11 @@ class SplitProgramRewriter(Rewriter):
             if not re.search(r'fail_\d+|unsat_c', program_str) is None:
                 print("Predicate names and constants of the form fail_\\d+ or unsat_c are not allowed... Exiting")
                 sys.exit(1)
-            program = QuantifiedProgram("\n".join(self.cur_program_rules), self.cur_program_quantifier, self.curr_program_name, self.head_predicates)
+            program = QuantifiedProgram("\n".join(self.cur_program_rules), self.curr_weak_constraints, self.cur_program_quantifier, self.curr_program_name, self.head_predicates)
             self.programs.append(program)
             self.program_is_open = False
         self.cur_program_rules = []
+        self.curr_weak_constraints = []
         self.head_predicates = set()
 
     def print_program_types(self):
@@ -87,9 +93,15 @@ class SplitProgramRewriter(Rewriter):
         for i in range(len(self.programs)):
             prg = self.programs[i]
             if prg.program_type == ProgramQuantifier.EXISTS:
-                print("\\exists", end="")
+                if prg.contains_weak():
+                    print("\\exists_weak", end="")
+                else:
+                    print("\\exists", end="")
             elif prg.program_type == ProgramQuantifier.FORALL:
-                print("\\forall", end="")
+                if prg.contains_weak():
+                    print("\\forall_weak", end="")
+                else:
+                    print("\\forall", end="")
             elif prg.program_type == ProgramQuantifier.CONSTRAINTS:
                 print("\\constraint", end="")
             else:
@@ -98,3 +110,31 @@ class SplitProgramRewriter(Rewriter):
                 print(", ", end="")
 
         print("]")
+    
+    def aspq_program_contains_weak(self):
+        for program in self.programs:
+            if program.contains_weak():
+                return True
+        return False    
+    
+    #\exits \exitst_w, \forall \forall_w or in opposite order
+    def non_alternating_aspq_with_weaks(self):
+        if not self.aspq_program_contains_weak():
+            return False
+        first_program_type = self.programs[0].program_type
+        for program in self.programs:
+            if not program.constraint() and program.program_type != first_program_type:
+                return False
+        return True
+
+    def visit_Minimize(self, node):
+        self.optimization_program = True
+        terms = []
+        for term in node.terms:
+            terms.append(str(term))
+        weight = str(node.weight)
+        level = str(node.priority)
+        body = ",".join([str(lit) for lit in node.body])
+        weak = WeakConstraint(body, weight, level, terms)
+        self.curr_weak_constraints.append(weak)
+        return node.update(**self.visit_children(node))

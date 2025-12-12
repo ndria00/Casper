@@ -8,7 +8,7 @@ class ASPQType(str, Enum):
     FORALL_FIRST = "forall_first"
 
 class ProgramsHandler:
-    
+    FLIP_CONSTRAINT_PREDICATE_NAME = "unsat_c"
     encoding : str
     instance : str
     original_programs_list : list
@@ -16,10 +16,10 @@ class ProgramsHandler:
     program_type : ASPQType
 
     def flip_constraint(self):
-        flipConstraintRewriter = FlipConstraintRewriter(f"unsat_c{len(self.original_programs_list)}")
+        flipConstraintRewriter = FlipConstraintRewriter(f"{self.FLIP_CONSTRAINT_PREDICATE_NAME}{len(self.original_programs_list)}")
         constraint_program = self.original_programs_list[len(self.original_programs_list)-1]
         parse_string(constraint_program.rules, lambda stm: (flipConstraintRewriter(stm)))
-        self.flipped_constraint = QuantifiedProgram(rules="\n".join(flipConstraintRewriter.program), program_type=ProgramQuantifier.CONSTRAINTS, program_name=constraint_program.name, head_predicates=flipConstraintRewriter.head_predicates) 
+        self.flipped_constraint = QuantifiedProgram(rules="\n".join(flipConstraintRewriter.program), weak_constraints=[], program_type=ProgramQuantifier.CONSTRAINTS, program_name=constraint_program.name, head_predicates=flipConstraintRewriter.head_predicates) 
 
     def p(self, idx):
         if idx < 0 or idx >= len(self.original_programs_list):
@@ -46,18 +46,23 @@ class ProgramsHandler:
         self.flipped_constraint = None
         self.compute_program_type()
         #add empty constraint program if no constraint program was parsed
-        if self.original_programs_list[len(self.original_programs_list)-1].program_type != ProgramQuantifier.CONSTRAINTS:
-            self.original_programs_list.append(QuantifiedProgram("", ProgramQuantifier.CONSTRAINTS, "c", set()))
         self.flip_constraint()
 
 
     def check_aspq_type(self):
+        if len(self.original_programs_list) > 3:
+            for program in self.original_programs_list:
+                if program.contains_weak():
+                    print("This solver can only work with aspq programs with weak  with uo to two quantifiers")
+                    exit(1)
+
         for i in range(0, len(self.original_programs_list)):
             program = self.original_programs_list[i]
             if program.program_type == ProgramQuantifier.CONSTRAINTS and i != len(self.original_programs_list)-1:
                 raise Exception("Constraint is not the last program")
-            if i < len(self.original_programs_list)-1 and self.original_programs_list[i].program_type == self.original_programs_list[i-1].program_type:
-                raise Exception("Quantifiers are not alternating")
+            if i < len(self.original_programs_list)-1:
+                if self.original_programs_list[i].program_type == self.original_programs_list[i-1].program_type and not self.original_programs_list[i].contains_weak() and not self.original_programs_list[i-1].contains_weak():
+                    raise Exception("Quantifiers are not alternating")
 
         #set program type
         if self.original_programs_list[0].program_type == ProgramQuantifier.FORALL:
@@ -70,9 +75,9 @@ class ProgramsHandler:
 
     def print_programs(self):
         for prg in self.original_programs_list:
-            if prg.program_quantifier == ProgramQuantifier.EXISTS:
+            if prg.program_type == ProgramQuantifier.EXISTS:
                 print("EXISTS PROGRAM")
-            elif prg.program_quantifier == ProgramQuantifier.FORALL:
+            elif prg.program_type == ProgramQuantifier.FORALL:
                 print("FORALL PROGRAM")
             else:
                 print("CONSTRAINTS PROGRAM")

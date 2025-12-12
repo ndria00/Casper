@@ -6,9 +6,11 @@ from .Rewriter import Rewriter
 
 class FlipConstraintRewriter(Rewriter):
     unsat_atom = clingo.ast.SymbolicAtom
-    
-    def __init__(self, unsat_pred_name):
+    add_constraint : bool
+
+    def __init__(self, unsat_pred_name, add_constraint=True):
         super().__init__(unsat_pred_name=unsat_pred_name)
+        self.add_constraint= add_constraint
         self.location = clingo.ast.Location(clingo.ast.Position("<generated>", 1, 1), clingo.ast.Position("<generated>", 1, 1))
         self.unsat_atom = clingo.ast.SymbolicAtom(clingo.ast.Function(self.location, self.unsat_pred_name, [], False))
         self.head_predicates.add(unsat_pred_name)
@@ -29,5 +31,6 @@ class FlipConstraintRewriter(Rewriter):
         return node.update(**self.visit_children(node))
     
     def visit_Program(self, node):
-        self.program.append(f":-not {self.unsat_pred_name}.")
+        if self.add_constraint:
+            self.program.append(f":-not {self.unsat_pred_name}.")
         return node.update(**self.visit_children(node))

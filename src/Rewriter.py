@@ -41,6 +41,9 @@ class Rewriter(clingo.ast.Transformer):
             self.head_predicates.add(elem.literal.atom.symbol.name)
             #print(f"Added {elem.literal.atom.symbol.name} to head predicates")
 
+    def visit_Minimize(self, node):
+        pass
+        
     def reset(self):
         self.program = []
         self.head_predicates = set()
