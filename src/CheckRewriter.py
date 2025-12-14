@@ -18,6 +18,7 @@ class CheckRewriter:
     clone_cost_rewriter : CloneRewriter
     clone_cost_program : str
     dominated_predicate_name : str
+    rewriting_program_name : str
 
     def __init__(self, program):
         self.program = program
@@ -38,6 +39,7 @@ class CheckRewriter:
         
         #clone of program is needed only by weak rewriters
         if create_clone:
+            self.rewriting_program_name = suffix
             self.clone_program_rewriter = CloneRewriter(self.program, f"{suffix}{SolverSettings.CLONE_ATOM_SUFFIX}")
             #clone program from self.program -> predicates are rewritten to the clone signature
             self.clone_program_rewriter.rewrite()
@@ -52,10 +54,10 @@ class CheckRewriter:
         self.construct_dominated_program(suffix)
 
     def construct_dominated_program(self, suffix):
-        diff_rule = f"{SolverSettings.DIFF_COST_AT_LEVEL}{suffix}(L):-{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}(C1,L), {SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}{SolverSettings.CLONE_ATOM_SUFFIX}(C2,L),C1!=C2."
+        diff_rule = f"{SolverSettings.DIFF_COST_AT_LEVEL}{suffix}(L):-{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}(C1,L), {SolverSettings.COST_AT_LEVEL_ATOM_NAME}{self.rewriting_program_name}{SolverSettings.CLONE_ATOM_SUFFIX}(C2,L),C1!=C2."
         has_higher_rule = f"{SolverSettings.HAS_HIGHER_DIFF}{suffix}(L):-{SolverSettings.DIFF_COST_AT_LEVEL}{suffix}(L), {SolverSettings.DIFF_COST_AT_LEVEL}{suffix}(L1), L<L1."
         highest_rule = f"{SolverSettings.HIGHEST_LEVEL_DIFF}{suffix}(L):-{SolverSettings.DIFF_COST_AT_LEVEL}{suffix}(L), not {SolverSettings.HAS_HIGHER_DIFF}{suffix}(L)."
-        dominated_rule = f"{self.dominated_predicate_name}:-{SolverSettings.HIGHEST_LEVEL_DIFF}{suffix}(L),{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}(C1,L),{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}{SolverSettings.CLONE_ATOM_SUFFIX}(C2,L),C2<C1."
+        dominated_rule = f"{self.dominated_predicate_name}:-{SolverSettings.HIGHEST_LEVEL_DIFF}{suffix}(L),{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{suffix}(C1,L),{SolverSettings.COST_AT_LEVEL_ATOM_NAME}{self.rewriting_program_name}{SolverSettings.CLONE_ATOM_SUFFIX}(C2,L),C2<C1."
         
         self.dominated_program = f"{diff_rule}\n{has_higher_rule}\n{highest_rule}\n{dominated_rule}\n"
         self.dominated_program_head_predicates ={f"{SolverSettings.DIFF_COST_AT_LEVEL}{suffix}", f"{SolverSettings.HAS_HIGHER_DIFF}{suffix}", f"{SolverSettings.HIGHEST_LEVEL_DIFF}{suffix}", f"{self.dominated_predicate_name}"}
