@@ -53,6 +53,6 @@ class CounterexampleRewriter:
         for symbol in p1_symbols:
             if symbol in model and symbol.name in p1_predicates:
                 assumptions.append(f"{symbol}.")
-            else:
-                assumptions.append(f"not {symbol}.")
+            # else:
+            #     assumptions.append(f"not {symbol}.")
         self.rewritten_programs_list[0].rules = self.first_program_rewritten + " ".join(assumptions)

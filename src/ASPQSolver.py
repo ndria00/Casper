@@ -194,8 +194,9 @@ class ASPQSolver:
                 for atom in ctl_weak.symbolic_atoms:
                     if atom.symbol.name == SolverSettings.LEVEL_COST_ATOM_NAME:
                         level_facts.append(f"{atom.symbol}.")
-                self.settings.logger.print(f"Added weak levels to ctl move {"\n".join(level_facts)}")
-                self.ctl_move.add("levels", [], "\n".join(level_facts))
+                level_facts_str = "\n".join(level_facts)
+                self.settings.logger.print(f"Added weak levels to ctl move {level_facts_str}")
+                self.ctl_move.add("levels", [], level_facts_str)
                 self.ctl_move.ground([("levels", [])])
                 
             # add dummy cost program for global weak constraints
