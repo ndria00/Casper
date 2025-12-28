@@ -11,15 +11,17 @@ class CloneRewriter(clingo.ast.Transformer):
     rewritten_program : str
     rewritten_program_head_predicates : set
     found_choice : bool
-
-    def __init__(self, program, clone_suffix):
+    ignore_predicates: set
+    
+    def __init__(self, program, clone_suffix, ignore_predicates):
         self.program = program
         self.clone_suffix = clone_suffix
         self.rewritten_program = ""
         self.rewritten_program_rules = []
         self.rewritten_program_head_predicates = set()
         self.found_choice = False
-    
+        self.ignore_predicates = ignore_predicates
+        
     #clone program is needed just once
     def rewrite(self):
         if self.rewritten_program == "":
@@ -38,7 +40,7 @@ class CloneRewriter(clingo.ast.Transformer):
                             new_condition = []
                             for condition in el.condition:
                                 if condition.ast_type == clingo.ast.ASTType.Literal:
-                                    if condition.atom.symbol.name in self.program.head_predicates:
+                                    if condition.atom.symbol.name in self.program.head_predicates and not condition.atom.symbol.name in self.ignore_predicates:
                                         new_term = clingo.ast.Function(condition.location, condition.atom.symbol.name + self.clone_suffix, condition.atom.symbol.arguments, False)
                                         new_atom = clingo.ast.SymbolicAtom(new_term)
                                         new_literal = clingo.ast.Literal(condition.location, condition.sign, new_atom)    
@@ -54,7 +56,7 @@ class CloneRewriter(clingo.ast.Transformer):
                         rewritten_body.append(new_agg)
                     else:
                         if elem.atom.ast_type == clingo.ast.ASTType.SymbolicAtom:
-                            if elem.atom.symbol.name in self.program.head_predicates:
+                            if elem.atom.symbol.name in self.program.head_predicates and not elem.atom.symbol.name in self.ignore_predicates:
                                 new_term = clingo.ast.Function(node.location, elem.atom.symbol.name + self.clone_suffix, elem.atom.symbol.arguments, False)
                                 new_atom = clingo.ast.SymbolicAtom(new_term)
                                 new_literal = clingo.ast.Literal(node.location, elem.sign, new_atom)
@@ -76,14 +78,16 @@ class CloneRewriter(clingo.ast.Transformer):
                 assert choice_element.ast_type == clingo.ast.ASTType.ConditionalLiteral
                 choice_condition = []
                 choice_literal = choice_element.literal
-                new_choice_term = clingo.ast.Function(choice_literal.location, choice_literal.atom.symbol.name + self.clone_suffix, choice_literal.atom.symbol.arguments, False)
+                suffix = self.clone_suffix if choice_literal.atom.symbol.name not in self.ignore_predicates else ""
+                new_choice_term = clingo.ast.Function(choice_literal.location, choice_literal.atom.symbol.name + suffix, choice_literal.atom.symbol.arguments, False)
                 new_choice_atom = clingo.ast.SymbolicAtom(new_choice_term)
                 new_chocie_literal = clingo.ast.Literal(choice_literal.location, choice_literal.sign, new_choice_atom)
 
                 for literal in choice_element.condition:
                     if literal.atom.ast_type == clingo.ast.ASTType.SymbolicAtom:
                         if literal.atom.symbol.name in self.program.head_predicates:
-                            new_term = clingo.ast.Function(literal.location, literal.atom.symbol.name + self.clone_suffix, literal.atom.symbol.arguments, False)
+                            suffix = self.clone_suffix if literal.atom.symbol.name not in self.ignore_predicates else ""
+                            new_term = clingo.ast.Function(literal.location, literal.atom.symbol.name + suffix, literal.atom.symbol.arguments, False)
                             new_atom = clingo.ast.SymbolicAtom(new_term)
                             new_literal = clingo.ast.Literal(literal.location, literal.sign, new_atom)
                             choice_condition.append(new_literal)
@@ -97,8 +101,9 @@ class CloneRewriter(clingo.ast.Transformer):
         else:
             if node.head.atom.ast_type != clingo.ast.ASTType.BooleanConstant:
                 if node.head.ast_type == clingo.ast.ASTType.Literal:
-                    new_term = clingo.ast.Function(node.location, node.head.atom.symbol.name + self.clone_suffix, node.head.atom.symbol.arguments, False)
+                    suffix = self.clone_suffix if node.head.atom.symbol.name not in self.ignore_predicates else ""
+                    new_term = clingo.ast.Function(node.location, node.head.atom.symbol.name + suffix, node.head.atom.symbol.arguments, False)
                     new_head = clingo.ast.SymbolicAtom(new_term)
-                    self.rewritten_program_head_predicates.add(node.head.atom.symbol.name + self.clone_suffix)   
+                    self.rewritten_program_head_predicates.add(node.head.atom.symbol.name + suffix)   
                     
         self.rewritten_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))

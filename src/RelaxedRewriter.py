@@ -1,6 +1,7 @@
 import clingo
 import clingo.ast
 
+from .SolverSettings import SolverSettings
 from .Rewriter import Rewriter
 
 
@@ -28,7 +29,7 @@ class RelaxedRewriter(Rewriter):
 
     def visit_Program(self, node):
         choice = "{" + f"{self.unsat_pred_name}" + "}."
-        weak = f":~{self.unsat_pred_name}. [1@{self.weak_level}]"
+        weak = f":~{self.unsat_pred_name}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{self.weak_level}]"
         self.program.append(weak)
         self.program.append(choice)
         return node.update(**self.visit_children(node))

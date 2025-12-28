@@ -4,8 +4,10 @@ class ProgramQuantifier(str, Enum):
     EXISTS = "exists"
     FORALL = "forall"
     CONSTRAINTS = "constraint"
+    GLOBAL_WEAK = "global"
+
 class QuantifiedProgram:
-    MIN_WEAK_LEVEL : str = 0
+    MIN_WEAK_LEVEL : int = 0
     rules : str
     weak_constraints : list
     program_type : ProgramQuantifier
@@ -34,6 +36,9 @@ class QuantifiedProgram:
     def constraint(self):
         return self.program_type == ProgramQuantifier.CONSTRAINTS
 
+    def global_weak(self):
+        return self.program_type == ProgramQuantifier.GLOBAL_WEAK
+
     def print_head_predicates(self):
         for predicate in self.head_predicates : 
             print(f"Head predicate {predicate}, ")
@@ -52,6 +57,8 @@ class QuantifiedProgram:
             quantifier = "%@forall"
         elif self.program_type == ProgramQuantifier.CONSTRAINTS:
             quantifier = "%@constraint"
+        elif self.program_type == ProgramQuantifier.GLOBAL_WEAK:
+            quantifier = "%@global"
         else:
             raise Exception("Unexpected quantifier")
         return f"{quantifier}\n{self.rules}"

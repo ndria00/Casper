@@ -11,6 +11,7 @@ import sys
 
 class SplitProgramRewriter(Rewriter):
     programs: list[QuantifiedProgram]
+    global_weak : QuantifiedProgram
     rules : list[str]
     cur_program_quantifier : ProgramQuantifier
     curr_program_name : str
@@ -29,8 +30,15 @@ class SplitProgramRewriter(Rewriter):
         self.constraint_program = None
         self.encoding_program = encoding_program
         self.optimization_program = False
+        self.global_weak = None
         parse_string(encoding_program, lambda stm: (self(stm)))
         self.closed_program()
+
+        if not self.global_weak is None and len(self.programs) == 0:
+            raise Exception("Only weak program specified - this is not allowed")
+        if not self.global_weak is None and self.programs[0].program_type == ProgramQuantifier.FORALL:
+            print("WARNING: global weak are ignored when first program is a forall program")
+            self.global_weak = None
         if self.programs[len(self.programs)-1].program_type != ProgramQuantifier.CONSTRAINTS:
             self.programs.append(QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set()))
 
@@ -39,8 +47,9 @@ class SplitProgramRewriter(Rewriter):
         is_exist_directive = not re.match("%@exists", value_str) is None
         is_forall_directive = not re.match("%@forall", value_str) is None
         is_constraint_directive = not re.match("%@constraint", value_str) is None
+        is_global_weak_directive = not re.match("%@global", value_str) is None
 
-        if is_exist_directive or is_forall_directive or is_constraint_directive:
+        if is_exist_directive or is_forall_directive or is_constraint_directive or is_global_weak_directive:
             self.closed_program()
     
         if is_exist_directive:
@@ -59,6 +68,10 @@ class SplitProgramRewriter(Rewriter):
             self.program_is_open = True
             self.cur_program_quantifier = ProgramQuantifier.CONSTRAINTS
             self.curr_program_name = "c"
+        elif is_global_weak_directive:
+            self.program_is_open = True
+            self.cur_program_quantifier = ProgramQuantifier.GLOBAL_WEAK
+            self.curr_program_name = "global_weak"
         # else:
             #print("Spurious comment subprogram start")
         
@@ -81,7 +94,10 @@ class SplitProgramRewriter(Rewriter):
                 print("Predicate names and constants of the form fail_\\d+ or unsat_c are not allowed... Exiting")
                 sys.exit(1)
             program = QuantifiedProgram("\n".join(self.cur_program_rules), self.curr_weak_constraints, self.cur_program_quantifier, self.curr_program_name, self.head_predicates)
-            self.programs.append(program)
+            if self.cur_program_quantifier != ProgramQuantifier.GLOBAL_WEAK:
+                self.programs.append(program)
+            else:
+                self.global_weak = program
             self.program_is_open = False
         self.cur_program_rules = []
         self.curr_weak_constraints = []
@@ -108,10 +124,11 @@ class SplitProgramRewriter(Rewriter):
                 print("None", end="")
             if i != len(self.programs)-1:
                 print(", ", end="")
-
+        if not self.global_weak is None:
+            print(", \\global_weak", end="")
         print("]")
     
-    def aspq_program_contains_weak(self):
+    def aspq_program_contains_local_weak(self):
         for program in self.programs:
             if program.contains_weak():
                 return True
@@ -119,7 +136,7 @@ class SplitProgramRewriter(Rewriter):
     
     #\exits \exitst_w, \forall \forall_w or in opposite order
     def non_alternating_aspq_with_weaks(self):
-        if not self.aspq_program_contains_weak():
+        if not self.aspq_program_contains_local_weak():
             return False
         first_program_type = self.programs[0].program_type
         for program in self.programs:
@@ -133,7 +150,10 @@ class SplitProgramRewriter(Rewriter):
         for term in node.terms:
             terms.append(str(term))
         weight = str(node.weight)
-        level = str(node.priority)
+        if not node.priority is None:
+            level = str(node.priority)
+        else:
+            level = "0"
         body = ",".join([str(lit) for lit in node.body])
         weak = WeakConstraint(body, weight, level, terms)
         self.curr_weak_constraints.append(weak)

@@ -17,3 +17,6 @@ class WeakConstraint:
             return f" :~{self.body}. [{self.weight}@{self.level}, {joined_terms}]"
         else:
             return f" :~{self.body}. [{self.weight}@{self.level}]"
+    
+    def is_level_variable(self):
+        return isinstance(self.level, int)

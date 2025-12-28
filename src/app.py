@@ -43,7 +43,7 @@ def entrypoint():
     #check if rewritten program contains weak (for example, in \exists_weak \exist programs weak are never rewritten) 
     solver_settings.no_weak = solver_settings.no_weak or weak_rewriter.rewritten_program_contains_weak
 
-    programs_handler = ProgramsHandler(weak_rewriter.rewritten_program(), instance_program)
+    programs_handler = ProgramsHandler(weak_rewriter.rewritten_program(), instance_program, split_program_rewriter.global_weak)
     programs_handler.check_aspq_type()
     solver  = ASPQSolver(programs_handler, solver_settings, True, 0)
     result = solver.solve_n_levels([], "")
