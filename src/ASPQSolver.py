@@ -188,12 +188,12 @@ class ASPQSolver:
                 ctl_weak = clingo.Control()
                 cost_p2_rewriter = CostRewriter(self.programs_handler.p(1),SolverSettings.WEAK_VIOLATION_ATOM_NAME, SolverSettings.LEVEL_COST_ATOM_NAME, SolverSettings.COST_AT_LEVEL_ATOM_NAME, True, False)
                 cost_p2_rewriter.rewrite()
-                ctl_weak.add(self.choice_str + self.programs_handler.p(1).rules + cost_p2_rewriter.rewritten_program_with_aggregate_and_levels())
+                ctl_weak.add(self.choice_str + self.programs_handler.p(1).rules + cost_p2_rewriter.rewritten_program_with_aggregate())
                 ctl_weak.ground()
                 level_facts = []
                 for atom in ctl_weak.symbolic_atoms:
                     if atom.symbol.name == SolverSettings.LEVEL_COST_ATOM_NAME:
-                        level_facts.append(f"{atom.symbol}.")
+                        level_facts.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}({atom.symbol.arguments[1]}).")
                 level_facts_str = "\n".join(level_facts)
                 self.settings.logger.print(f"Added weak levels to ctl move {level_facts_str}")
                 self.ctl_move.add("levels", [], level_facts_str)

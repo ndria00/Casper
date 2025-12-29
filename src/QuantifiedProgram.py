@@ -61,4 +61,5 @@ class QuantifiedProgram:
             quantifier = "%@global"
         else:
             raise Exception("Unexpected quantifier")
-        return f"{quantifier}\n{self.rules}"
+        weak_repr = "\n".join(str(weak) for weak in self.weak_constraints)
+        return f"{quantifier}\n{self.rules}\n{weak_repr}"

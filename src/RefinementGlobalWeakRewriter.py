@@ -57,10 +57,6 @@ class RefinementGlobalWeakRewriter:
 
         template_constraint = "; ".join(ground_set)
         
-        violated_sum_weak = f":~{SolverSettings.GLOBAL_WEAK_VIOLATED_BOUND_ATOM_NAME}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@" + str(SolverSettings.GLOBAL_WEAK_CONSTRAINT_LEVEL) + "]"
-        # template_constraint = SolverSettings.GLOBAL_WEAK_VIOLATED_BOUND_ATOM_NAME + ":- #sum{" + template_constraint +"} >= [[bound]]."
-        # self.placeholder_constraint = f"{template_constraint}\n{violated_sum_weak}"
-
         self.placeholder_constraint = ":~ #sum{" + template_constraint +"} >= [[bound]]. [" + str(SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS) + "@" + str(SolverSettings.GLOBAL_WEAK_CONSTRAINT_LEVEL) + "]"
 
         self.sorted_levels = sorted([level for level in self.global_weak_violation_atoms_for_level])

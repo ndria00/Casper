@@ -8,6 +8,7 @@ from .CheckRewriter import CheckRewriter
 from .QuantifiedProgram import ProgramQuantifier, QuantifiedProgram
 from .OrProgramRewriter import OrProgramRewriter
 from clingo.ast import parse_string
+import clingo
 
 class WeakRewriter:
 
@@ -19,7 +20,6 @@ class WeakRewriter:
 
     def __init__(self, split_program_rewriter, rewrite_without_weaks):
         self.split_program_rewriter = split_program_rewriter
-
         self.original_programs = split_program_rewriter.programs
         self.rewritten_programs = []
         self.rewritten_program_contains_weak = False
@@ -217,21 +217,32 @@ class WeakRewriter:
             if self.original_programs[i].contains_weak():
                 return False
 
-        check_rewriter = CheckRewriter(rewriting_program, True, True, True)
+        check_rewriter = CheckRewriter(rewriting_program, True, True)
         check_rewriter.rewrite(True, rewriting_program.name)
+        choice = self.construct_choice_up_to_index(index)
+        levels = self.extract_levels_from_program(choice, rewriting_program.rules, check_rewriter.cost_rewriter.rewritten_program, check_rewriter.cost_rewriter.current_violation_predicate)
+        level_pred = check_rewriter.cost_program_level_predicate
+        level_clone_pred = check_rewriter.cost_program_level_predicate_clone
+        levels_atoms = []
+        levels_atoms_clone = []
+        for level in levels:
+            levels_atoms.append(f"{level_pred}({level}).")
+            levels_atoms_clone.append(f"{level_clone_pred}({level}).")
+        levels_atoms_str = "\n".join(levels_atoms)
+        levels_atoms_clone_str = "\n".join(levels_atoms_clone)
+        
         dominated_pred_name = check_rewriter.dominated_predicate_name
         rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates)
         #rewrite program and add one forall level (I am rewriting \exitst_weak P_1 : C)
+        rewritten = False
         if index == len(self.original_programs)-2: #program must be the last one before constraint
             # print(f"Applying col4 to index {index}")
             added_program_head_predicates = set([dominated_pred_name]) | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates
-            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.FORALL, f"{rewriting_program_name}_col4", added_program_head_predicates)
+            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, f"{rewriting_program_name}_col4", added_program_head_predicates)
             constraint_program = self.original_programs[-1]            
             rewritten_constraint_program = QuantifiedProgram(f"{constraint_program.rules}\n:-{dominated_pred_name}.", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:index] + [rewritten_rewriting_program] + [added_program] + [rewritten_constraint_program]
-
-            self.update_programs()
-            return True
+            rewritten = True
         #rewrite first program exploiting second forall program (no extra quantied program)
         elif index == len(self.original_programs)-3:
             assert self.original_programs[index+1].program_type == ProgramQuantifier.FORALL
@@ -241,12 +252,10 @@ class WeakRewriter:
             or_next_forall_program_rewriter.rewrite("", None)
             constraint_program = self.original_programs[-1]
             p2_prime_head_predicates = next_forall_program.head_predicates | rewriting_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
-            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates)
+            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates)
             rewritten_constraint_program = QuantifiedProgram(f"{constraint_program.rules}\n:-{dominated_pred_name}.", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_constraint_program]
-            
-            self.update_programs()
-            return True
+            rewritten = True
         
         else: #the next program is a forall and the next one is an exists
             assert self.original_programs[index+1].program_type == ProgramQuantifier.FORALL and self.original_programs[index+2].program_type == ProgramQuantifier.EXISTS
@@ -255,11 +264,13 @@ class WeakRewriter:
             or_next_forall_program_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, next_forall_program)
             or_next_forall_program_rewriter.rewrite("", None)
             p2_prime_head_predicates = next_forall_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
-            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates)
+            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates)
             next_exists_program = self.original_programs[index+2]
             rewritten_next_exists_program = QuantifiedProgram(f"{next_exists_program.rules}\n:-{dominated_pred_name}.", [], next_exists_program.program_type, next_exists_program.name, next_exists_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_next_exists_program] + self.original_programs[index+3::]
             
+            rewritten = True
+        if rewritten:
             self.update_programs()
             return True
 
@@ -276,24 +287,34 @@ class WeakRewriter:
             if self.original_programs[i].contains_weak():
                 return False
 
-        check_rewriter = CheckRewriter(rewriting_program, True, True, True)
+        check_rewriter = CheckRewriter(rewriting_program, True, True)
         check_rewriter.rewrite(True, rewriting_program.name)
-        dominated_pred_name = check_rewriter.dominated_predicate_name
+        choice = self.construct_choice_up_to_index(index)
+        levels = self.extract_levels_from_program(choice, rewriting_program.rules, check_rewriter.cost_rewriter.rewritten_program, check_rewriter.cost_rewriter.current_violation_predicate)
+        level_pred = check_rewriter.cost_program_level_predicate
+        level_clone_pred = check_rewriter.cost_program_level_predicate_clone
+        levels_atoms = []
+        levels_atoms_clone = []
+        for level in levels:
+            levels_atoms.append(f"{level_pred}({level}).")
+            levels_atoms_clone.append(f"{level_clone_pred}({level}).")
+        levels_atoms_str = "\n".join(levels_atoms)
+        levels_atoms_clone_str = "\n".join(levels_atoms_clone)
 
+        dominated_pred_name = check_rewriter.dominated_predicate_name
+        rewritten = False
         rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates)
         #rewrite program and add one forall level (I am rewriting \exitst_weak P_1 : C)
         if index == len(self.original_programs)-2: #program must be the last one before constraint
             # print(f"Applying col5 to index {index} -2")
             added_program_head_predicates = set([dominated_pred_name]) | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates
-            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.EXISTS, f"{rewriting_program_name}_col5", added_program_head_predicates)
+            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, f"{rewriting_program_name}_col5", added_program_head_predicates)
             constraint_program = self.original_programs[-1]
             or_constraint_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, constraint_program)
             or_constraint_rewriter.rewrite("", None)
             rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:index] + [rewritten_rewriting_program] + [added_program] + [rewritten_constraint_program]
-
-            self.update_programs()
-            return True
+            rewritten = True
         #rewrite first program exploiting second forall program (no extra quantied program)
         elif index == len(self.original_programs)-3:
             assert self.original_programs[index+1].program_type == ProgramQuantifier.FORALL
@@ -303,15 +324,12 @@ class WeakRewriter:
             or_next_exists_rewriter.rewrite("", None)
             constraint_program = self.original_programs[-1]
             p2_prime_head_predicates = next_exists_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
-            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates)
+            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates)
             or_constraint_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, constraint_program)
             or_constraint_rewriter.rewrite("", None)
             rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_constraint_program]
-            
-            self.update_programs()
-            return True
-        
+            rewritten = True
         else: #the next program is a forall and the next one is an exists
             assert self.original_programs[index+1].program_type == ProgramQuantifier.EXISTS and self.original_programs[index+2].program_type == ProgramQuantifier.FORALL
             # print(f"Applying col5 to index {index}-4, ...")
@@ -319,11 +337,13 @@ class WeakRewriter:
             or_next_exists_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, next_exists_program)
             or_next_exists_rewriter.rewrite("", None)
             p2_prime_head_predicates = rewriting_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
-            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates)
+            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates)
             next_forall_program = self.original_programs[index+2]
             rewritten_next_forall_program = QuantifiedProgram(f"{next_forall_program.rules}\n:-{dominated_pred_name}.", [], next_forall_program.program_type, next_forall_program.name, next_forall_program.head_predicates)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_next_forall_program] + self.original_programs[index+3::]
-            
+            rewritten = True
+
+        if rewritten:          
             self.update_programs()
             return True
 
@@ -447,13 +467,12 @@ class WeakRewriter:
         
         self.update_programs()
 
-
     def rewrite_exists_exists_weak(self):
         # print("Rewriting an exists exists weak program")
         #P1 takes rules of P_2 and a forall is added over the close 
         p_1 = self.original_programs[0]
         p_2 = self.original_programs[1]
-        c = self.original_programs[2]
+        c_program = self.original_programs[2]
 
         check_rewriter = CheckRewriter(p_2, True, True)
         check_rewriter.rewrite(True, p_2.name)
@@ -461,16 +480,25 @@ class WeakRewriter:
         cloned_p2_program = check_rewriter.clone_program_rewriter.rewritten_program
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
 
-        cost_p2_program = check_rewriter.cost_rewriter.rewritten_program
+        cost_p2_program = check_rewriter.cost_rewriter.rewritten_program_with_aggregate()
         cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates
 
+        choice = self.construct_choice_up_to_index(1)
+        levels = self.extract_levels_from_program(choice, p_2.rules, cost_p2_program, SolverSettings.WEAK_VIOLATION_ATOM_NAME)
+        
+        levels_p2 = []
+        levels_p2_clone = []
+        for level in levels:
+            levels_p2.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}({level}).")
+            levels_p2_clone.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}{check_rewriter.clone_suffix}({level}).")
         cost_clone_p2_program = check_rewriter.clone_cost_rewriter.rewritten_program
         cost_clone_p2_head_predicates = check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates
 
         dominated_program = check_rewriter.dominated_program
         dominated_program_head_predicates = check_rewriter.dominated_program_head_predicates
-        
-        c_program = f"{c.rules}\n{cost_p2_program}\n{cost_clone_p2_program}\n{dominated_program}\n:-{check_rewriter.dominated_predicate_name}."
+        levels_p2_str = "\n".join(levels_p2)
+        levels_p2_clone_str = "\n".join(levels_p2_clone)
+        c_program = f"{c_program.rules}\n{cost_p2_program}\n{cost_clone_p2_program}\n{dominated_program}\n:-{check_rewriter.dominated_predicate_name}.\n{levels_p2_str}\n{levels_p2_clone_str}"
         c_head_predicates = cost_p2_head_predicates | cost_clone_p2_head_predicates | dominated_program_head_predicates
         
         weak_repr = "\n".join([str(weak) for weak in p_1.weak_constraints])
@@ -480,12 +508,12 @@ class WeakRewriter:
         #P_1 = P_1 \cup{{unsat}.}  \cup or(P_2, unsat) \cup or(C, unsat) \cup {:~unsat. [2@l_min]}, but I am interested on models of P_1
         self.rewritten_programs[0].set_output_predicates(self.original_programs[0].head_predicates)
         self.update_programs()
-
+    
     def rewrite_forall_forall_weak(self):
         # print("Rewriting a forall forall weak program")
         p_1 = self.original_programs[0]
         p_2 = self.original_programs[1]
-        c = self.original_programs[2]
+        c_program = self.original_programs[2]
 
         check_rewriter = CheckRewriter(p_2, True, True)
         check_rewriter.rewrite(True, p_2.name)
@@ -493,8 +521,17 @@ class WeakRewriter:
         cloned_p2_program = check_rewriter.clone_program_rewriter.rewritten_program
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
 
-        cost_p2_program = check_rewriter.cost_rewriter.rewritten_program
+        cost_p2_program = check_rewriter.cost_rewriter.rewritten_program_with_aggregate()
         cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates
+
+        choice = self.construct_choice_up_to_index(1)
+        levels = self.extract_levels_from_program(choice, p_2.rules, cost_p2_program, SolverSettings.WEAK_VIOLATION_ATOM_NAME)
+        
+        levels_p2 = []
+        levels_p2_clone = []
+        for level in levels:
+            levels_p2.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}({level}).")
+            levels_p2_clone.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}{check_rewriter.clone_suffix}({level}).")
 
         cost_clone_p2_program = check_rewriter.clone_cost_rewriter.rewritten_program
         cost_clone_p2_head_predicates = check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates
@@ -505,7 +542,9 @@ class WeakRewriter:
         or_c_rewriter = OrProgramRewriter(set(), check_rewriter.dominated_predicate_name, False, c_program)
         or_c_rewriter.rewrite("", -1)
 
-        c_program = f"{or_c_rewriter.rewritten_program}\n{cost_p2_program}\n{cost_clone_p2_program}\n{dominated_program}"
+        levels_p2_str = "\n".join(levels_p2)
+        levels_p2_clone_str = "\n".join(levels_p2_clone)
+        c_program = f"{or_c_rewriter.rewritten_program}\n{cost_p2_program}\n{cost_clone_p2_program}\n{dominated_program}\n{levels_p2_str}\n{levels_p2_clone_str}"
         c_head_predicates = cost_p2_head_predicates | cost_clone_p2_head_predicates | dominated_program_head_predicates
 
         weak_repr = "\n".join([str(weak) for weak in p_1.weak_constraints])
@@ -523,8 +562,33 @@ class WeakRewriter:
                     self.rewritten_program_contains_weak = True
             self.original_programs = self.rewritten_programs
             self.rewritten_programs = []
-
     def rewritten_program(self):
         if len(self.rewritten_programs) == 0:
             return self.original_programs
         return self.rewritten_programs
+
+
+    def construct_choice_up_to_index(self, index):
+        choice = ""
+        for i in range(index):
+            p = self.original_programs[i]
+            ctl = clingo.Control()
+            ctl.add(p.rules)
+            ctl.add(choice)
+            ctl.ground()
+            if len(ctl.symbolic_atoms) > 0:
+                choice = "{" + ";".join(str(atom.symbol) for atom in ctl.symbolic_atoms) +"}."
+        return choice
+    
+    def extract_levels_from_program(self, choice, program_rules, cost_program, violation_predicate_name):
+        levels = set()
+        ctl_levels = clingo.Control()
+        ctl_levels.add(choice)
+        ctl_levels.add(program_rules)
+        ctl_levels.add(cost_program)
+        ctl_levels.ground()
+        levels = set()
+        for atom in ctl_levels.symbolic_atoms:
+            if atom.symbol.name == violation_predicate_name:
+                levels.add(atom.symbol.arguments[1])
+        return levels

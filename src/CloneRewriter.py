@@ -26,6 +26,11 @@ class CloneRewriter(clingo.ast.Transformer):
     def rewrite(self):
         if self.rewritten_program == "":
             parse_string(self.program.rules, lambda stm: (self(stm)))
+            for pred in self.program.head_predicates:
+                if pred not in self.ignore_predicates:
+                    self.rewritten_program_head_predicates.add(f"{pred}{self.clone_suffix}")
+                else:
+                    self.rewritten_program_head_predicates.add(pred) 
             self.rewritten_program = "\n".join(self.rewritten_program_rules) 
 
     def visit_Rule(self, node):
@@ -103,7 +108,6 @@ class CloneRewriter(clingo.ast.Transformer):
                 if node.head.ast_type == clingo.ast.ASTType.Literal:
                     suffix = self.clone_suffix if node.head.atom.symbol.name not in self.ignore_predicates else ""
                     new_term = clingo.ast.Function(node.location, node.head.atom.symbol.name + suffix, node.head.atom.symbol.arguments, False)
-                    new_head = clingo.ast.SymbolicAtom(new_term)
-                    self.rewritten_program_head_predicates.add(node.head.atom.symbol.name + suffix)   
+                    new_head = clingo.ast.SymbolicAtom(new_term)   
                     
         self.rewritten_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))

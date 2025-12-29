@@ -21,8 +21,6 @@ class CostRewriter(clingo.ast.Transformer):
     #placeholder for rules v(C,L,X) :- B_r. for each weak in program
     placeholder_violation_rules : list
     placeholder_violation_program : str
-    level_placeholder_rules : list
-    level_placeholder_program : str
     violation_predicates_arities : dict
     #cost_at_level(C, L) :- level(L), #sum{C,L:v(C,L,X_1);C,L:v(C,L,X_2);}
     placeholder_aggregate_rule : str
@@ -35,7 +33,6 @@ class CostRewriter(clingo.ast.Transformer):
     current_weak : WeakConstraint
     current_violation_predicate : str
     last_rewriting_suffix : str
-    rewrite_level_predicate : bool
 
     def __init__(self, program, violation_predicate=SolverSettings.WEAK_VIOLATION_ATOM_NAME, level_predicate=SolverSettings.LEVEL_COST_ATOM_NAME, cost_predicate=SolverSettings.COST_AT_LEVEL_ATOM_NAME, keep_body_signature=False, rewrite_level_predicate=True):
         self.program = program
@@ -50,8 +47,6 @@ class CostRewriter(clingo.ast.Transformer):
         self.keep_body_signature = keep_body_signature
         self.violation_predicates_arities = dict()
         self.last_rewriting_suffix = ""
-        self.level_placeholder_rules = []
-        self.level_placeholder_program = ""
         self.level_predicate = level_predicate
         self.placeholder_aggregate_rule = ""
         self.rewrite_level_predicate = rewrite_level_predicate
@@ -65,7 +60,7 @@ class CostRewriter(clingo.ast.Transformer):
             self.pattern_annotated_literals = re.compile('|'.join(re.escape(k) for k in self.annotated_literals))
         self.rewritten_program = ""
         self.rewritten_program_head_predicates = set([self.current_violation_predicate])
-        self.rewritten_program_head_predicates_with_levels_and_aggregate = set([self.current_violation_predicate, self.current_level_predicate, self.current_cost_predicate])
+        self.rewritten_program_head_predicates_with_aggregate = set([self.current_violation_predicate, self.current_level_predicate, self.current_cost_predicate])
         self.rewritten_program = self.pattern_annotated_literals.sub(lambda a : self.annotated_literals[a.group(0)] + suffix, self.placeholder_violation_program)
         self.last_rewriting_suffix = suffix
 
@@ -117,12 +112,6 @@ class CostRewriter(clingo.ast.Transformer):
         #original weak
         body_repr = ", ".join(str(lit) for lit in rewritten_body)
         violation_rule = f"{self.current_weak_head}:-{body_repr}."
-        if self.rewrite_level_predicate:
-            level_rule = f"{self.ANNOTATION_OPEN}{self.level_predicate}{self.ANNOTATION_CLOSE}({self.current_weak_level}):-{self.current_weak_head}."
-        else:
-            level_rule = f"{self.level_predicate}({self.current_weak_level}):-{self.current_weak_head}."
-            
-        self.level_placeholder_rules.append(level_rule)
         self.placeholder_violation_rules.append(str(violation_rule))
         
 
@@ -137,7 +126,7 @@ class CostRewriter(clingo.ast.Transformer):
             #construct head of violation rule
             terms_str = ",".join(weak.terms)
             self.current_weak_head = ""
-            self.current_weak_level = self.LEVEL_VARIABLE if weak.is_level_variable() else weak.level
+            self.current_weak_level = weak.level
             aggregate_lits = []
             violation_atom_arity = 0
             if len(weak.terms) > 0:
@@ -175,14 +164,12 @@ class CostRewriter(clingo.ast.Transformer):
 
         self.placeholder_aggregate_rule = f"{aggregate_rule_head}:-{aggregate_rule_body}={self.COST_VARIABLE}."
         self.placeholder_violation_program = "\n".join(self.placeholder_violation_rules)
-        self.level_placeholder_program = "\n".join(self.level_placeholder_rules)
         
 
-    def rewritten_program_with_aggregate_and_levels(self):
+    def rewritten_program_with_aggregate(self):
         if self.placeholder_violation_program != "":
-            rewritten_levels = self.pattern_annotated_literals.sub(lambda a : self.annotated_literals[a.group(0)] + self.last_rewriting_suffix, self.level_placeholder_program)
             rewritten_cost = self.pattern_annotated_literals.sub(lambda a : self.annotated_literals[a.group(0)] + self.last_rewriting_suffix, self.placeholder_aggregate_rule)
             
-            return f"{rewritten_levels}\n{self.rewritten_program}\n{rewritten_cost}"
+            return f"{self.rewritten_program}\n{rewritten_cost}"
         return ""
     
