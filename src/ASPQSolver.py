@@ -192,7 +192,7 @@ class ASPQSolver:
                 ctl_weak.ground()
                 level_facts = []
                 for atom in ctl_weak.symbolic_atoms:
-                    if atom.symbol.name == SolverSettings.LEVEL_COST_ATOM_NAME:
+                    if atom.symbol.name == SolverSettings.WEAK_VIOLATION_ATOM_NAME:
                         level_facts.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}({atom.symbol.arguments[1]}).")
                 level_facts_str = "\n".join(level_facts)
                 self.settings.logger.print(f"Added weak levels to ctl move {level_facts_str}")
@@ -425,12 +425,12 @@ class ASPQSolver:
                     #:~unsat_c was added to detect this case when the countermove ctl was created
                     if self.programs_handler.p(1).contains_weak():
                         assert len(self.current_counterexample_cost) > 0
+                        self.settings.logger.print(f"{self.output_pad}Counterexample cost {self.current_counterexample_cost}")
                         if self.current_counterexample_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
                             self.settings.logger.print(f"{self.output_pad}No counterexample found")
                             return True if self.programs_handler.exists_first() else False
                     self.settings.logger.print(f"{self.output_pad}Counterexample found {self.current_counterexample}")
                     self.counterexample_found += 1
-                    self.settings.logger.print(f"{self.output_pad}Counterexample cost {self.current_counterexample_cost}")
                     SolverStatistics().counterexample_found()
                     if self.refinement_rewriter is None:
                         if not self.programs_handler.p(1).contains_weak():

@@ -21,8 +21,10 @@ class WeakObserver(clingo.Observer):
         dummy_weak_rules = []
 
         for weak in self.weak_levels:
-            dummy_weak_rules.append(f":~{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}. [0@{weak}]")
-        
+            if weak > 0:
+                dummy_weak_rules.append(f":~{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}. [0@{weak}]")
+            else:#negative levels are reserverd for detecting violation of c(resp.  neg c)
+                dummy_weak_rules.append(f":~{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{weak}]")
         dummy_fact = "" 
         if len(self.weak_levels) > 0:
             dummy_fact = f"{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}."
