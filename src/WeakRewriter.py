@@ -481,7 +481,7 @@ class WeakRewriter:
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
 
         cost_p2_program = check_rewriter.cost_rewriter.rewritten_program_with_aggregate()
-        cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates
+        cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate
 
         choice = self.construct_choice_up_to_index(1)
         levels = self.extract_levels_from_program(choice, p_2.rules, cost_p2_program, SolverSettings.WEAK_VIOLATION_ATOM_NAME)
@@ -522,7 +522,7 @@ class WeakRewriter:
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
 
         cost_p2_program = check_rewriter.cost_rewriter.rewritten_program_with_aggregate()
-        cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates
+        cost_p2_head_predicates = check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate
 
         choice = self.construct_choice_up_to_index(1)
         levels = self.extract_levels_from_program(choice, p_2.rules, cost_p2_program, SolverSettings.WEAK_VIOLATION_ATOM_NAME)
