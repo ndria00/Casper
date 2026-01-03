@@ -95,7 +95,6 @@ class ASPQSolver:
         self.last_quantified_model = None
         self.p1_predicates_are_output = len(self.programs_handler.p(0).output_predicates) == 0
         self.counterexample_found = 0
-    
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control()
@@ -344,12 +343,13 @@ class ASPQSolver:
                 if not self.exists_first:
                     return False
                                 
+                if self.exists_first and  not self.programs_handler.global_weak_program is None and not self.last_quantified_model is None:
+                    print("OPTIMUM FOUND")
+                    self.print_projected_model(self.last_quantified_model)
+                    return True
                 #program starts with exists and therefore there might be models already found
                 #the exit code should depend also on these
                 if self.models_found > 0:
-                    if not self.programs_handler.global_weak_program is None:
-                        print("OPTIMUM FOUND")
-                        self.print_projected_model(self.last_quantified_model)
                     return True
                 else:
                     return False
@@ -391,6 +391,10 @@ class ASPQSolver:
                     return True if self.programs_handler.forall_first() else False
                 else:
                     self.settings.logger.print(f"Candidate cost: {self.current_candidate_cost}")
+                    #check if current candidate violates the bound constraint
+                    if not self.programs_handler.global_weak_program is None:
+                        if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
+                            return False
                     #Weak refinement introduces weak constraints in the first program
                     #the ASPQ is unsatisfiable when either the move program is unsatisfiable or there is no other 
                     #model left from P_1 that does not admit any countermove - this condition is detected by the

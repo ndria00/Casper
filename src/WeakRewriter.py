@@ -475,7 +475,7 @@ class WeakRewriter:
         c_program = self.original_programs[2]
 
         check_rewriter = CheckRewriter(p_2, True, True)
-        check_rewriter.rewrite(True, p_2.name)
+        check_rewriter.rewrite(True, "")
 
         cloned_p2_program = check_rewriter.clone_program_rewriter.rewritten_program
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
@@ -516,7 +516,7 @@ class WeakRewriter:
         c_program = self.original_programs[2]
 
         check_rewriter = CheckRewriter(p_2, True, True)
-        check_rewriter.rewrite(True, p_2.name)
+        check_rewriter.rewrite(True, "")
 
         cloned_p2_program = check_rewriter.clone_program_rewriter.rewritten_program
         cloned_p2_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
