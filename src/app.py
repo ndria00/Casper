@@ -51,7 +51,7 @@ def entrypoint():
         if bool(args.statistics):
             SolverStatistics().print_statistics()
         print("ASPQ SAT")
-        exit(10)
+        exit(10 if not solver.optimum_found else 30)
     else:
         if bool(args.statistics):
             SolverStatistics().print_statistics()

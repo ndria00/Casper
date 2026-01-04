@@ -56,6 +56,7 @@ class ASPQSolver:
     output_pad :str
     p1_predicates_are_output : bool
     counterexample_found : int
+    optimum_found : bool
 
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
@@ -95,6 +96,8 @@ class ASPQSolver:
         self.last_quantified_model = None
         self.p1_predicates_are_output = len(self.programs_handler.p(0).output_predicates) == 0
         self.counterexample_found = 0
+        self.optimum_found = False
+        
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control()
@@ -303,6 +306,7 @@ class ASPQSolver:
                             if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
                                 if not self.programs_handler.global_weak_program is None:
                                     print("OPTIMUM FOUND")
+                                    self.optimum_found = True
                                     self.print_projected_model(self.last_quantified_model)
                                 self.models_found += 1
                                 return True # enumeration of optimal models not supported yet
@@ -330,6 +334,7 @@ class ASPQSolver:
                     elif self.current_candidate_cost > self.last_quantified_model_cost:
                         if not self.programs_handler.global_weak_program is None:
                             print("OPTIMUM FOUND")
+                            self.optimum_found = True
                             self.print_projected_model(self.last_quantified_model)
                         return True
                     else:
@@ -345,6 +350,7 @@ class ASPQSolver:
                                 
                 if self.exists_first and  not self.programs_handler.global_weak_program is None and not self.last_quantified_model is None:
                     print("OPTIMUM FOUND")
+                    self.optimum_found = True
                     self.print_projected_model(self.last_quantified_model)
                     return True
                 #program starts with exists and therefore there might be models already found
