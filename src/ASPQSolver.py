@@ -101,21 +101,21 @@ class ASPQSolver:
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control()
-        self.settings.logger.print(f"Added First program to ctl move:\n{self.programs_handler.p(0).rules}")
+        self.settings.logger.debug("%sAdded First program to ctl move:\n%s", self.output_pad, self.programs_handler.p(0).rules)
         self.ctl_move.add(self.programs_handler.p(0).rules)
 
         if self.programs_handler.p(0).contains_weak():
             #add weak
             weak_repr = "\n".join(str(weak) for weak in self.programs_handler.p(0).weak_constraints)
-            self.settings.logger.print(f"Added First program weak constraints to ctl move:\n{weak_repr}")
+            self.settings.logger.debug("%sAdded First program weak constraints to ctl move:\n%s", self.output_pad, weak_repr)
             self.ctl_move.add(weak_repr)
             self.ctl_move_weak_observer = WeakObserver()
             self.ctl_move.register_observer(self.ctl_move_weak_observer)
 
-        self.settings.logger.print(f"Added choice to ctl move:\n{self.choice_str}")
+        self.settings.logger.debug("%sAdded choice to ctl move:\n%s", self.output_pad, self.choice_str)
         self.ctl_move.add(self.choice_str)
         if self.programs_handler.instance != "":
-            self.settings.logger.print(f"Added instance to ctl move:\n{self.programs_handler.instance}")
+            self.settings.logger.debug("%sAdded instance to ctl move:\n%s", self.output_pad, self.programs_handler.instance)
             self.ctl_move.add(self.programs_handler.instance)
         
         #1-ASP(Q) programs always have a constraint program - it is created without rules when a constraint program is not parsed
@@ -123,11 +123,11 @@ class ASPQSolver:
             #in case of exists_weak : C and \forall_weak C the program was already rewritten (c is the empty program and the original constraint program was absorbed in P_1)
             if self.programs_handler.last_exists():
                 if not self.programs_handler.p(0).contains_weak():
-                    self.settings.logger.print(f"{self.output_pad}Added constraint program to ctl move:\n{self.programs_handler.c().rules} to ctl 0")
+                    self.settings.logger.debug("%sAdded constraint program to ctl move:\n%s", self.output_pad, self.programs_handler.c().rules)
                     self.ctl_move.add(self.programs_handler.c().rules)
             else:
                 if not self.programs_handler.p(0).contains_weak():
-                    self.settings.logger.print(f"{self.output_pad}Added flipped constraint program to ctl move:\n{self.programs_handler.neg_c().rules} to ctl 0")
+                    self.settings.logger.debug(f"%sAdded flipped constraint program to ctl move:\n%s", self.output_pad, self.programs_handler.neg_c().rules)
                     self.ctl_move.add(self.programs_handler.neg_c().rules)
             self.ctl_move.ground()
             for atom in self.ctl_move.symbolic_atoms:
@@ -138,20 +138,20 @@ class ASPQSolver:
             
             if self.p1_predicates_are_output:
                 self.output_symbols_defined_in_first_program = self.symbols_defined_in_first_program
-            self.settings.logger.print(f"{self.output_pad}Grounded ctl move")
+            self.settings.logger.debug("%sGrounded ctl move", self.output_pad)
             return
         else:
             if self.programs_handler.p(1).contains_weak():
                 self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                 self.refinement_rewriter.compute_placeholder_program()
                 self.ctl_move.add(self.refinement_rewriter.dummy_refinement_weaks())
-                self.settings.logger.print(f"{self.output_pad}Added dummy weak program to ctl move:\n{self.refinement_rewriter.dummy_refinement_weaks()} ")
+                self.settings.logger.debug("%sAdded dummy weak program to ctl move:\n%s", self.output_pad, self.refinement_rewriter.dummy_refinement_weaks())
             
             if not self.programs_handler.global_weak_program is None:
                 cost_global_constraint_rewriter = CostRewriter(self.programs_handler.global_weak_program, SolverSettings.GLOBAL_WEAK_VIOLATION_ATOM_NAME, "", "", True, False)
                 cost_global_constraint_rewriter.rewrite()
                 self.ctl_move.add(cost_global_constraint_rewriter.rewritten_program)
-                self.settings.logger.print(f"Added cost program for global weak to ctl move:\n{cost_global_constraint_rewriter.rewritten_program}")
+                self.settings.logger.debug("%sAdded cost program for global weak to ctl move:\n%s", self.output_pad, cost_global_constraint_rewriter.rewritten_program)
             
             self.ctl_move.ground()
             choice = []
@@ -176,11 +176,11 @@ class ASPQSolver:
                     sub_choice_str = ";".join(choice) 
                     sub_choice_str = "{"+ sub_choice_str + "}. "
                     self.choice_str += sub_choice_str
-                    self.settings.logger.print(f"{self.output_pad}Constructed choice:\n{self.choice_str}")
+                    self.settings.logger.debug("%sConstructed choice:\n%s", self.output_pad, self.choice_str)
 
             if self.programs_handler.p(0).contains_weak():
                 pay_dummy_program = self.ctl_move_weak_observer.pay_dummy_program()
-                self.settings.logger.print(f"{self.output_pad}added dummy_weak for P_1 to ctl move:\n{pay_dummy_program}")
+                self.settings.logger.debug("%sadded dummy_weak for P_1 to ctl move:\n%s", self.output_pad, pay_dummy_program)
                 self.ctl_move.add("dummy_weak", [], pay_dummy_program)
                 self.ctl_move.ground([("dummy_weak", [])])
             
@@ -197,35 +197,35 @@ class ASPQSolver:
                     if atom.symbol.name == SolverSettings.WEAK_VIOLATION_ATOM_NAME:
                         level_facts.append(f"{SolverSettings.LEVEL_COST_ATOM_NAME}({atom.symbol.arguments[1]}).")
                 level_facts_str = "\n".join(level_facts)
-                self.settings.logger.print(f"Added weak levels to ctl move {level_facts_str}")
+                self.settings.logger.debug("%sAdded weak levels to ctl move %s", self.output_pad, level_facts_str)
                 self.ctl_move.add("levels", [], level_facts_str)
                 self.ctl_move.ground([("levels", [])])
                 
             # add dummy cost program for global weak constraints
             if not self.refinement_global_weak_rewriter is None:
                 pay_dummy_program_global = self.refinement_global_weak_rewriter.pay_dummy_program()
-                self.settings.logger.print(f"{self.output_pad}added dummy_weak for global weak constraints to ctl move:\n{pay_dummy_program_global}")
+                self.settings.logger.debug("%sadded dummy_weak for global weak constraints to ctl move:\n%s", self.output_pad, pay_dummy_program_global)
                 self.ctl_move.add("dummy_weak_global", [], pay_dummy_program_global)
                 self.ctl_move.ground([("dummy_weak_global", [])])
 
             if self.program_levels == 2:
                 self.ctl_countermove = clingo.Control()
-                self.settings.logger.print(f"{self.output_pad}added choice to ctl countermove:\n{self.choice_str}")
+                self.settings.logger.debug("%sadded choice to ctl countermove:\n%s", self.output_pad, self.choice_str)
                 self.ctl_countermove.add(self.choice_str)
                 self.ctl_countermove.add(self.programs_handler.p(1).rules)
-                self.settings.logger.print(f"{self.output_pad}added second program to ctl countermove:\n{self.programs_handler.p(1).rules}")
+                self.settings.logger.debug("%sadded second program to ctl countermove:\n%s", self.output_pad, self.programs_handler.p(1).rules)
                 if not self.programs_handler.p(1).contains_weak():
                     if self.programs_handler.last_exists():
                         self.ctl_countermove.add(self.programs_handler.c().rules)
-                        self.settings.logger.print(f"{self.output_pad}added constraint to ctl countermove:\n{self.programs_handler.c().rules}")
+                        self.settings.logger.debug("%sadded constraint to ctl countermove:\n%s", self.output_pad, self.programs_handler.c().rules)
                     else:
-                        self.settings.logger.print(f"{self.output_pad}added flipped constraint to ctl countermove:\n{self.programs_handler.neg_c().rules}")
+                        self.settings.logger.debug("%sadded flipped constraint to ctl countermove:\n%s", self.output_pad, self.programs_handler.neg_c().rules)
                         self.ctl_countermove.add(self.programs_handler.neg_c().rules)
                 #second program contains weak which were not rewritten
                 else:
                     weak_repr = "\n".join(str(weak) for weak in self.programs_handler.p(1).weak_constraints)
                     self.ctl_countermove.add(weak_repr)
-                    self.settings.logger.print(f"{self.output_pad}added weak to ctl countermove:\n{weak_repr}")
+                    self.settings.logger.debug("%sadded weak to ctl countermove:\n%s", self.output_pad, weak_repr)
                     self.relaxed_rewriter = RelaxedRewriter(SolverSettings.WEAK_NO_MODEL_LEVEL, SolverSettings.UNSAT_C_PREDICATE)
 
                     if self.programs_handler.exists_first():
@@ -233,7 +233,7 @@ class ASPQSolver:
                     else:
                         parse_string(self.programs_handler.c().rules, lambda stm: (self.relaxed_rewriter(stm)))
                     relaxed_constraint = "\n".join(self.relaxed_rewriter.program)
-                    self.settings.logger.print(f"{self.output_pad}added relaxed constraint to ctl countermove:\n{relaxed_constraint}")
+                    self.settings.logger.debug("%sadded relaxed constraint to ctl countermove:\n%s", self.output_pad, relaxed_constraint)
                     self.ctl_countermove.add(relaxed_constraint)
                     self.ctl_countermove_weak_observer = WeakObserver()
                     self.ctl_countermove.register_observer(self.ctl_countermove_weak_observer)
@@ -241,7 +241,7 @@ class ASPQSolver:
                 self.ctl_countermove.ground()
                 if self.programs_handler.p(1).contains_weak():
                     pay_dummy_program = self.ctl_countermove_weak_observer.pay_dummy_program()
-                    self.settings.logger.print(f"{self.output_pad}added dummy_weak to ctl countermove:\n{pay_dummy_program}")
+                    self.settings.logger.debug("%sadded dummy_weak to ctl countermove:\n%s", self.output_pad, pay_dummy_program)
                     self.ctl_countermove.add("dummy_weak", [], pay_dummy_program)
                     self.ctl_countermove.ground([("dummy_weak", [])])
 
@@ -277,7 +277,7 @@ class ASPQSolver:
 
         constraint = constraint[:-1]
         constraint += "."
-        self.settings.logger.print(f"{self.output_pad}Adding model as constraint to ctl move:\n{constraint}")
+        self.settings.logger.debug("%sAdding model as constraint to ctl move:\n%s", self.output_pad, constraint)
         self.ctl_move.add(f"constraint_{self.models_found}", [], constraint)
         self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
 
@@ -300,7 +300,7 @@ class ASPQSolver:
                     if self.last_quantified_model_cost == None or (self.current_candidate_cost <= self.last_quantified_model_cost):
                         if not self.programs_handler.global_weak_program is None:
                             current_upper_bound, cost_print = self.refinement_global_weak_rewriter.compute_cost_and_new_upper_bound(self.current_candidate_symbols_set)
-                            self.settings.logger.print(f"Current upper bound: {current_upper_bound}")
+                            self.settings.logger.debug("%sCurrent upper bound: %s", self.output_pad, current_upper_bound)
                             #last model is optimum
                             #TODO put the cost equal to 2 when enumeration is enabled
                             if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
@@ -316,7 +316,7 @@ class ASPQSolver:
                                 self.ctl_move.add(current_upper_bound)
                                 self.ctl_move.add(f"optimization_{SolverStatistics().solvers_iterations}", [], current_upper_bound)
                                 self.ctl_move.ground([(f"optimization_{SolverStatistics().solvers_iterations}", [])])
-                                self.settings.logger.print(f"Adding cost constraint to ctl move {current_upper_bound}")
+                                self.settings.logger.debug("%sAdding cost constraint to ctl move %s", self.output_pad, current_upper_bound)
                         else:
                             self.models_found += 1
                         if self.main_solver:
@@ -382,7 +382,7 @@ class ASPQSolver:
             while True:
                 #add model M_1 of P_1 as assumption
                 self.assumptions = []
-                self.settings.logger.print(f"{self.output_pad}Searching for candiate")
+                self.settings.logger.debug("%sSearching for candiate", self.output_pad)
                 # Assign external atoms introduced by refinement of programs with weak constraints 
                 if self.programs_handler.p(1).contains_weak() and self.counterexample_found > 0:
                     external_preds = self.refinement_rewriter.external_predicates
@@ -391,12 +391,12 @@ class ASPQSolver:
                     self.ctl_move.assign_external(clingo.Function(external_preds[-1]), True)
                 result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
                 if result.unsatisfiable:
-                    self.settings.logger.print(f"No candiate found")
+                    self.settings.logger.debug("%sNo candiate found", self.output_pad)
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
                     return True if self.programs_handler.forall_first() else False
                 else:
-                    self.settings.logger.print(f"Candidate cost: {self.current_candidate_cost}")
+                    self.settings.logger.debug("%sCandidate cost: %s", self.output_pad, self.current_candidate_cost)
                     #check if current candidate violates the bound constraint
                     if not self.programs_handler.global_weak_program is None:
                         if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
@@ -419,15 +419,15 @@ class ASPQSolver:
                                 return True if self.programs_handler.forall_first() else False
                             
                         
-                    self.settings.logger.print(f"{self.output_pad}Found candiate {self.current_candidate}")
+                    self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
                     self.construct_assumptions()
                     #search for counterexample
-                    self.settings.logger.print(f"{self.output_pad}Searching for counterexample")
+                    self.settings.logger.debug("%sSearching for counterexample", self.output_pad)
                     result = self.ctl_countermove.solve(assumptions=self.assumptions + self.external_assumptions, on_model=self.on_counterexample, on_finish=self.finished_search_for_counterexample)
                     
                     #winning move for the first quantifier - no recursive call for 2-ASPQ
                     if result.unsatisfiable:
-                        self.settings.logger.print(f"{self.output_pad}No counterexample found")
+                        self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                         #forall wins if P_2 \cup \neg C has no sm
                         #exists looses if P_2 \cup C has no sm
                         return False if self.programs_handler.last_exists() else True
@@ -435,11 +435,11 @@ class ASPQSolver:
                     #:~unsat_c was added to detect this case when the countermove ctl was created
                     if self.programs_handler.p(1).contains_weak():
                         assert len(self.current_counterexample_cost) > 0
-                        self.settings.logger.print(f"{self.output_pad}Counterexample cost {self.current_counterexample_cost}")
+                        self.settings.logger.debug("%sCounterexample cost %s", self.output_pad, self.current_counterexample_cost)
                         if self.current_counterexample_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
-                            self.settings.logger.print(f"{self.output_pad}No counterexample found")
+                            self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                             return True if self.programs_handler.exists_first() else False
-                    self.settings.logger.print(f"{self.output_pad}Counterexample found {self.current_counterexample}")
+                    self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.current_counterexample)
                     self.counterexample_found += 1
                     SolverStatistics().counterexample_found()
                     if self.refinement_rewriter is None:
@@ -459,12 +459,12 @@ class ASPQSolver:
                     #add cost program for current candiate
                     if self.programs_handler.p(0).contains_weak():
                         refine_program += ""
-                    self.settings.logger.print(f"{self.output_pad}Result of refinement:\n{refine_program}")
+                    self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refine_program)
                     self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
                     self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
                     SolverStatistics().iteration_done()
         else:
-            self.settings.logger.print(f"{self.output_pad}Inside recursive cegar for n-ASPQ with n >=3")
+            self.settings.logger.debug("%sInside recursive cegar for n-ASPQ with n >=3", self.output_pad)
             while True:
                 self.assumptions = []
                 if self.refinement_solver is None:
@@ -474,7 +474,7 @@ class ASPQSolver:
                         #no move, current quantifier looses
                         return False if self.exists_first else True
                     else: 
-                        self.settings.logger.print(f"{self.output_pad}Found candiate {self.current_candidate}")
+                        self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
                         self.construct_assumptions()
                 else:
                     if self.program_levels > 3:
@@ -485,13 +485,13 @@ class ASPQSolver:
                             return False if self.exists_first else True
                         else:
                             self.refinement_rewriter.construct_assumptions()
-                            self.settings.logger.print(f"{self.output_pad}Found candiate {self.current_candidate}")
+                            self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
                     else:
                         result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
                         if result.unsatisfiable:
                             return False if self.exists_first else True
                         else:
-                            self.settings.logger.print(f"{self.output_pad}Found candiate {self.current_candidate}")
+                            self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
 
 
                 if self.counterexample_rewriter is None:

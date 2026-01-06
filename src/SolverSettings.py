@@ -1,8 +1,5 @@
+import logging
 from .QuantifiedProgram import QuantifiedProgram
-from .DebugLogger import DebugLogger
-from .ExecutionLogger import ExecutionLogger
-from .MyLogger import MyLogger
-
 
 class SolverSettings:
 
@@ -41,7 +38,7 @@ class SolverSettings:
     debug : bool
     constraint_print : bool
     enumeration : bool
-    logger : MyLogger
+    logger : logging.Logger
     ground_transformation : bool
     no_weak : bool
 
@@ -52,7 +49,10 @@ class SolverSettings:
         self.constraint_print = constraint_print
         self.no_weak = no_weak
         self.enumeration = True if n_models == 0 else False
-        if debug:
-            self.logger = DebugLogger()
-        else:
-            self.logger = ExecutionLogger()
+        self.setup_logging(self.debug)
+
+    def setup_logging(self, debug: bool):
+        logging.basicConfig()
+        self.logger = logging.getLogger("Casper")
+        level = logging.DEBUG if debug else logging.INFO
+        self.logger.setLevel(level)
