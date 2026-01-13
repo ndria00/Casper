@@ -100,7 +100,7 @@ class ASPQSolver:
         
     def ground_and_construct_choice_interfaces(self):
         choice = []
-        self.ctl_move = clingo.Control()
+        self.ctl_move = clingo.Control() #["--sign-def=neg"]
         self.settings.logger.debug("%sAdded First program to ctl move:\n%s", self.output_pad, self.programs_handler.p(0).rules)
         self.ctl_move.add(self.programs_handler.p(0).rules)
 
@@ -296,53 +296,47 @@ class ASPQSolver:
             satisfiable = self.recursive_cegar()
             if satisfiable:
                 if self.exists_first:
-                    #if no weak or first model this is an optimal model
-                    if self.last_quantified_model_cost == None or (self.current_candidate_cost <= self.last_quantified_model_cost):
-                        if not self.programs_handler.global_weak_program is None:
-                            current_upper_bound, cost_print = self.refinement_global_weak_rewriter.compute_cost_and_new_upper_bound(self.current_candidate_symbols_set)
-                            self.settings.logger.debug("%sCurrent upper bound: %s", self.output_pad, current_upper_bound)
-                            #last model is optimum
-                            #TODO put the cost equal to 2 when enumeration is enabled
-                            if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
-                                if not self.programs_handler.global_weak_program is None:
-                                    print("OPTIMUM FOUND")
-                                    self.optimum_found = True
-                                    self.print_projected_model(self.last_quantified_model)
-                                self.models_found += 1
-                                return True # enumeration of optimal models not supported yet
-                            else:
-                                print(f"OPTIMIZATION: {cost_print}")
-                                #add constraint with new bound                                    
-                                self.ctl_move.add(current_upper_bound)
-                                self.ctl_move.add(f"optimization_{SolverStatistics().solvers_iterations}", [], current_upper_bound)
-                                self.ctl_move.ground([(f"optimization_{SolverStatistics().solvers_iterations}", [])])
-                                self.settings.logger.debug("%sAdding cost constraint to ctl move %s", self.output_pad, current_upper_bound)
-                        else:
+                    if not self.programs_handler.global_weak_program is None:
+                        current_upper_bound, cost_print = self.refinement_global_weak_rewriter.compute_cost_and_new_upper_bound(self.current_candidate_symbols_set)
+                        self.settings.logger.debug("%sCurrent upper bound: %s", self.output_pad, current_upper_bound)
+                        #last model is optimum
+                        #TODO put the cost equal to 2 when enumeration is enabled
+                        if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
+                            if not self.programs_handler.global_weak_program is None:
+                                print("OPTIMUM FOUND")
+                                self.optimum_found = True
+                                self.print_projected_model(self.last_quantified_model)
                             self.models_found += 1
-                        if self.main_solver:
-                            self.print_projected_model(self.current_candidate)
-                            SolverStatistics().model_found()
-                            self.last_quantified_model_cost = self.current_candidate_cost
-                            self.last_quantified_model = self.current_candidate
-                            self.current_candidate_cost = []
-                            #empty model is unique if it exists - no other models can be
-                            if len(self.current_candidate) == 0:
-                                return True
-                        if self.models_found == self.settings.n_models:
-                            return True
-                        self.add_model_as_constraint()
-                    elif self.current_candidate_cost > self.last_quantified_model_cost:
-                        if not self.programs_handler.global_weak_program is None:
-                            print("OPTIMUM FOUND")
-                            self.optimum_found = True
-                            self.print_projected_model(self.last_quantified_model)
-                        return True
+                            return True # enumeration of optimal models not supported yet
+                        else:
+                            print(f"OPTIMIZATION: {cost_print}")
+                            #add constraint with new bound                                    
+                            self.ctl_move.add(current_upper_bound)
+                            self.ctl_move.add(f"optimization_{SolverStatistics().solvers_iterations}", [], current_upper_bound)
+                            self.ctl_move.ground([(f"optimization_{SolverStatistics().solvers_iterations}", [])])
+                            self.settings.logger.debug("%sAdding cost constraint to ctl move %s", self.output_pad, current_upper_bound)
                     else:
-                        raise Exception("The cost of the found model is unexpected")
+                        self.models_found += 1
+                    if self.main_solver:
+                        self.print_projected_model(self.current_candidate)
+                        SolverStatistics().model_found()
+                        self.last_quantified_model_cost = self.current_candidate_cost
+                        self.last_quantified_model = self.current_candidate
+                        self.current_candidate_cost = []
+                        #empty model is unique if it exists - no other models can be
+                        if len(self.current_candidate) == 0:
+                            return True
+                    if self.models_found == self.settings.n_models:
+                        return True
+                    self.add_model_as_constraint()
                 else:
                     if self.main_solver:
                         SolverStatistics().model_found()
-                    return True
+                    return True 
+                 
+                #enumeration of quantified models for ASPQ^W programs is not possible
+                if self.programs_handler.program_contains_weak():
+                    return self.models_found > 0 
             else:
                 #program starts with forall and is unsat
                 if not self.exists_first:

@@ -155,6 +155,6 @@ class SplitProgramRewriter(Rewriter):
         else:
             level = "0"
         body = ",".join([str(lit) for lit in node.body])
-        weak = WeakConstraint(body, weight+"+1", level, terms)
+        weak = WeakConstraint(body, weight, level, terms)
         self.curr_weak_constraints.append(weak)
         return node.update(**self.visit_children(node))

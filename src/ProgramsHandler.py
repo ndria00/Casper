@@ -97,3 +97,9 @@ class ProgramsHandler:
             self.program_type = ASPQType.EXISTS_FIRST
         else:
             raise Exception("First program is neither forall nor exists")
+    
+    def program_contains_weak(self):
+        for program in self.programs_list:
+            if program.contains_weak():
+                return True
+        return False
