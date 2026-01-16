@@ -174,13 +174,11 @@ class ASPQSolver:
             if self.programs_handler.p(1).contains_weak():
                 self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                 self.refinement_rewriter.compute_placeholder_program()
-                self.ctl_move_has_weak = True
             
-            if not self.programs_handler.global_weak_program is None:
+            if not self.programs_handler.global_weak_program is None and not self.settings.collapse_global_weak:
                 cost_global_constraint_rewriter = CostRewriter(self.programs_handler.global_weak_program, SolverSettings.GLOBAL_WEAK_VIOLATION_ATOM_NAME, "", "", True, False)
                 cost_global_constraint_rewriter.rewrite()
                 self.ctl_move.add(cost_global_constraint_rewriter.rewritten_program)
-                self.ctl_move_has_weak = True
                 self.settings.logger.debug("%sAdded cost program for global weak to ctl move:\n%s", self.output_pad, cost_global_constraint_rewriter.rewritten_program)
             
             self.ctl_move.ground()
