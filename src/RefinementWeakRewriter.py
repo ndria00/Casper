@@ -43,39 +43,39 @@ class RefinementWeakRewriter(RefinementRewriter):
         #reduct(P_2, M_2)
         self.reduct_rewriter.rewrite(counterexample, iteration)
         self.refinements_fail_predicates.append(self.reduct_rewriter.current_fail_predicate)
-        
+        self.current_fail_predicate = self.reduct_rewriter.current_fail_predicate
+        joined_programs_rules = "\n".join(program.rules for program in self.reduct_rewriter.rewritten_programs_list)
         #or(P_C, fail_{iteration})
         self.constraint_program_rewriter.rewrite(self.SUFFIX_P, iteration)
-
+        self.current_unsat_c_predicate = f"{SolverSettings.RELAXED_CPREDICATE}{self.SUFFIX_P}{iteration}"
         self.relaxed_or_constraint_program = self.constraint_program_rewriter.rewritten_program
-
-        #cost(P_2) over p_{iteration} signature. cost of clone of P_2 
-        self.check_rewriter.rewrite(False if self.num_calls > 0 else True, f"{self.SUFFIX_P}{str(iteration)}") 
-        
-        #compute or with clone and cost of clone just once - these two programs are the same across refinements
-        if self.num_calls == 0:
-            or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set()), False)
-            or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set()), False)
-            or_clone_program_rewriter.rewrite("", None)
-            or_clone_cost_program_rewriter.rewrite("", None)
-            activated_clone_program = or_clone_program_rewriter.rewritten_program
-            activated_clone_cost_program = or_clone_cost_program_rewriter.rewritten_program
-            self.activate_choice = "{" + SolverSettings.ACTIVATE_CLONE_PREDICATE + "}."
-            #used for forcing clingo to report a cost for all levels (even those that have no violation tuples) 
-            dummy_weak_rules_and_fact = f"{SolverSettings.DUMMY_REFINEMENT_PREDICATE}.\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NOT_DOMINATED_LEVEL}]\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_CONSTRAINT_LEVEL}]"
-            self.rewritten_program = f"{self.activate_choice}\n{activated_clone_program}\n{activated_clone_cost_program}\n{dummy_weak_rules_and_fact}"
-        
-        self.external_predicates.append(f"{SolverSettings.FLAG_ATOM_NAME}{iteration}")
-        fail_predicates = ", ".join(self.refinements_fail_predicates)
-        not_activate_if_no_answer_constraint = f":-{SolverSettings.ACTIVATE_CLONE_PREDICATE}, {fail_predicates}, {str(self.external_predicates[-1])}."
-        not_activate_not_fail_constraint = f":-not {SolverSettings.ACTIVATE_CLONE_PREDICATE}, not {self.reduct_rewriter.current_fail_predicate}.\n"
-        refinement_weak_constraints = f":~not {self.reduct_rewriter.current_fail_predicate}.[{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]\n:~not {self.reduct_rewriter.current_fail_predicate}, not {self.check_rewriter.dominated_predicate_name}.[{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NOT_DOMINATED_LEVEL}]\n:~not {self.reduct_rewriter.current_fail_predicate}, {SolverSettings.RELAXED_CPREDICATE}{self.SUFFIX_P}{iteration}.[{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_CONSTRAINT_LEVEL}]"
-        joined_programs_rules = "\n".join(program.rules for program in self.reduct_rewriter.rewritten_programs_list)
-        self.rewritten_program = f"{self.rewritten_program}\n{joined_programs_rules}\n{self.relaxed_or_constraint_program}\n{self.check_rewriter.cost_program}\n{self.check_rewriter.dominated_program}\n{refinement_weak_constraints}\n{not_activate_if_no_answer_constraint}\n{not_activate_not_fail_constraint}\n"
+        if self.original_programs_list[0].contains_weak():
+            #cost(P_2) over p_{iteration} signature. cost of clone of P_2 
+            self.check_rewriter.rewrite(False if self.num_calls > 0 else True, f"{self.SUFFIX_P}{str(iteration)}") 
+            self.current_dominated_predicate = self.check_rewriter.dominated_predicate_name
+            #compute or with clone and cost of clone just once - these two programs are the same across refinements
+            if self.num_calls == 0:
+                or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set()), False)
+                or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set()), False)
+                or_clone_program_rewriter.rewrite("", None)
+                or_clone_cost_program_rewriter.rewrite("", None)
+                activated_clone_program = or_clone_program_rewriter.rewritten_program
+                activated_clone_cost_program = or_clone_cost_program_rewriter.rewritten_program
+                self.activate_choice = "{" + SolverSettings.ACTIVATE_CLONE_PREDICATE + "}."
+                #used for forcing clingo to report a cost for all levels (even those that have no violation tuples) 
+                self.rewritten_program = f"{self.activate_choice}\n{activated_clone_program}\n{activated_clone_cost_program}"
+            
+            self.external_predicates.append(f"{SolverSettings.FLAG_ATOM_NAME}{iteration}")
+            fail_predicates = ", ".join(self.refinements_fail_predicates)
+            not_activate_if_no_answer_constraint = f":-{SolverSettings.ACTIVATE_CLONE_PREDICATE}, {fail_predicates}, {str(self.external_predicates[-1])}."
+            not_activate_not_fail_constraint = f":-not {SolverSettings.ACTIVATE_CLONE_PREDICATE}, not {self.reduct_rewriter.current_fail_predicate}.\n"
+            refinement_weak_constraints = f":~not {self.reduct_rewriter.current_fail_predicate}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]\n:~not {self.reduct_rewriter.current_fail_predicate}, not {self.check_rewriter.dominated_predicate_name}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NOT_DOMINATED_LEVEL}]\n:~not {self.reduct_rewriter.current_fail_predicate}, {self.current_unsat_c_predicate}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_CONSTRAINT_LEVEL}]"
+            self.rewritten_program = f"{self.rewritten_program}\n{joined_programs_rules}\n{self.relaxed_or_constraint_program}\n{self.check_rewriter.cost_program}\n{self.check_rewriter.dominated_program}\n{refinement_weak_constraints}\n{not_activate_if_no_answer_constraint}\n{not_activate_not_fail_constraint}\n"
+        else:
+            refinement_weak_constraints = f":~not {self.reduct_rewriter.current_fail_predicate}, {self.current_unsat_c_predicate}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_CONSTRAINT_LEVEL}]"
+            self.rewritten_program = f"{joined_programs_rules}\n{self.relaxed_or_constraint_program}\n{refinement_weak_constraints}\n"
         self.num_calls += 1
 
-    def dummy_refinement_weaks(self):
-        return f"{SolverSettings.DUMMY_REFINEMENT_PREDICATE}.\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NOT_DOMINATED_LEVEL}]\n:~{SolverSettings.DUMMY_REFINEMENT_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_CONSTRAINT_LEVEL}]"
 
 
     def refined_program(self):

@@ -10,13 +10,14 @@ class RefinementGlobalWeakRewriter:
     cost_bound : int
     rewriting_iteration : int
     placeholder_constraint : str
-
+    violated_bound_atoms : str
     sorted_levels : list
     global_weak_violation_atoms_for_level : dict
     total_cost_for_level : dict
     #external atoms used for activating only the last constraint (used for enumeration of optimal models) 
     # external_atoms : list
-
+    iteration : int
+    current_violated_bound_atom_name : str
 
     def __init__(self, weak_program):
         self.weak_program = weak_program
@@ -29,6 +30,9 @@ class RefinementGlobalWeakRewriter:
         self.sorted_levels = []
         self.global_weak_violation_atoms_for_level = dict()
         self.total_cost_for_level = dict()
+        self.iteration = 0
+        self.violated_bound_atoms = []
+        self.current_violated_bound_atom_name  = ""
 
     def compute_placeholder_program(self, symbolic_atoms):
         for atom in symbolic_atoms:
@@ -57,8 +61,7 @@ class RefinementGlobalWeakRewriter:
 
         template_constraint = "; ".join(ground_set)
         
-        self.placeholder_constraint = ":~ #sum{" + template_constraint +"} >= [[bound]]. [" + str(SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS) + "@" + str(SolverSettings.GLOBAL_WEAK_CONSTRAINT_LEVEL) + "]"
-
+        self.placeholder_constraint = "[[V_global_head]]" + ":- #sum{" + template_constraint +"} >= [[bound]].\n:~ [[V_global_head]]. [" + str(SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS) + "@" + str(SolverSettings.GLOBAL_WEAK_CONSTRAINT_LEVEL) + "]"
         self.sorted_levels = sorted([level for level in self.global_weak_violation_atoms_for_level])
         
     def compute_cost_and_new_upper_bound(self, model=None):
@@ -66,6 +69,8 @@ class RefinementGlobalWeakRewriter:
         prev_sum = 1
         bound = 0
         cost_string = ""
+        self.current_violated_bound_atom_name = f"{SolverSettings.GLOBAL_WEAK_VIOLATED_BOUND_ATOM_NAME}{self.iteration}"
+        self.violated_bound_atoms.append(self.current_violated_bound_atom_name)
         for lev in self.sorted_levels:
             current_cost = 0
             for (atom,negated) in self.global_weak_violation_atoms_for_level[lev]:
@@ -80,8 +85,5 @@ class RefinementGlobalWeakRewriter:
             # print(lev,":",current_cost,end=", " if lev != self.sorted_levels[-1] else "")
             prev_sum = self.total_cost_for_level[lev]
         # print()
-        return (self.placeholder_constraint.replace("[[bound]]",str(bound)), cost_string)
-
-    def pay_dummy_program(self):
-        return f"{SolverSettings.DUMMY_GLOBAL_PREDICATE}.\n:~{SolverSettings.DUMMY_GLOBAL_PREDICATE}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.GLOBAL_WEAK_CONSTRAINT_LEVEL}]"
-    
+        self.iteration += 1
+        return (self.placeholder_constraint.replace("[[bound]]",str(bound)).replace("[[V_global_head]]", self.current_violated_bound_atom_name), cost_string)    

@@ -1,5 +1,6 @@
 
 
+from .WeakObserver import WeakObserver
 from .WeakConstraint import WeakConstraint
 from .SolverSettings import SolverSettings
 from .ProgramsHandler import ProgramsHandler
@@ -17,13 +18,16 @@ class WeakRewriter:
     or_predicate : str
     rewritten_program_contains_weak : bool
     rewrite_without_weaks : bool
+    collapse_global_weak_in_p1 : bool
 
-    def __init__(self, split_program_rewriter, rewrite_without_weaks):
+    def __init__(self, split_program_rewriter, rewrite_without_weaks, collapse_global_weak_in_p1 = False):
         self.split_program_rewriter = split_program_rewriter
         self.original_programs = split_program_rewriter.programs
+        self.global_weak = split_program_rewriter.global_weak
         self.rewritten_programs = []
         self.rewritten_program_contains_weak = False
         self.rewrite_without_weaks = rewrite_without_weaks
+        self.collapse_global_weak_in_p1 = collapse_global_weak_in_p1
             
         #program of more than two levels is not allowed to contain weak
         if len(self.original_programs) > 3:
@@ -55,6 +59,29 @@ class WeakRewriter:
             else: #rewriting uniform not-plain plain did not produce an ASP program - either \Pi is alternating or uniform and <(not)plain, not plain>
                 self.rewrite_uniform_not_plain_plain()
                 self.rewrite()
+                if self.collapse_global_weak_in_p1:
+                    p_1 = self.original_programs[0]
+                    
+                    #remap global weak levels from -4 on
+                    ctl_weak = clingo.Control()
+                    ctl_weak.add(p_1.rules)
+                    ctl_weak.add("\n".join(str(weak) for weak in self.global_weak.weak_constraints))
+                    weak_observer = WeakObserver()
+                    ctl_weak.register_observer(weak_observer)
+                    ctl_weak.ground()
+                    increment = 0
+                    updated_global_weaks = self.global_weak.weak_constraints
+                    if len(weak_observer.weak_levels) != 0:
+                        max_level = max(weak_observer.weak_levels)
+                        #TODO fix this with a constant from SolverSettings
+                        increment = (max_level + 4) * -1
+                        updated_global_weaks = []
+                        for weak in self.global_weak.weak_constraints:
+                            updated_global_weaks.append(WeakConstraint(weak.body, weak.weight, weak.level + str(increment), weak.terms))
+                    
+                    self.rewritten_programs = [QuantifiedProgram(p_1.rules, updated_global_weaks + p_1.weak_constraints, p_1.program_type, p_1.name, p_1.head_predicates)] + self.original_programs[1::]
+                    self.global_weak = None
+                    self.update_programs()
         else:
             # print("Rewriting weak constraints")
             self.rewrite_no_cegar()
@@ -371,17 +398,28 @@ class WeakRewriter:
             self.rewritten_programs = self.original_programs
         p_1 = self.original_programs[0]
         p_2 = self.original_programs[1]
-
+        p_1_opt = self.original_programs[0].contains_weak()
+        p_2_opt = self.original_programs[0].contains_weak()
         uniform = True if p_1.program_type == p_2.program_type else False
         p_1_exists = p_1.exists()
 
         #\exists \exists_weak or \forall \foral_weak - not plain plain problems were already transformed into an asp program
         #\exists_weak \exists_weak and \forall_weak \forall_weak are also possible but are treated in the same way
         if uniform:
-            if p_1_exists:
-                self.rewrite_exists_exists_weak()
+            if p_1_opt and p_2_opt:
+                assert False
+                # if p_1_exists: #\exists^w \exists^w
+                #     self.col4(1)
+                #     self.col2(1)
+                # else: #\forall^w \forall^w
+                #     self.col5(1)
+                #     self.col3(1)
+                    
             else:
-                self.rewrite_forall_forall_weak()
+                if p_1_exists:
+                    self.rewrite_exists_exists_weak()
+                else:
+                    self.rewrite_forall_forall_weak()
 
         #else: alternating programs are directly handled by the solver 
 
@@ -390,30 +428,28 @@ class WeakRewriter:
         # print("Rewriting an exists weak c program")
         c = self.original_programs[1]
 
-        flipConstraintRewriter = FlipConstraintRewriter(f"{SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}", False)
+        flipConstraintRewriter = FlipConstraintRewriter(f"{SolverSettings.UNSAT_C_PREDICATE}", False)
         parse_string(c.rules, lambda stm: (flipConstraintRewriter(stm)))
-        weak_constraint = f":~{SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
+        weak_constraint = f":~{SolverSettings.UNSAT_C_PREDICATE}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
         flipped_constraint = "\n".join(flipConstraintRewriter.program)
         flipped_constraint_with_weak = f"{flipped_constraint}\n{weak_constraint}"
         
-        dummy_fact = f"{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}.\n:~{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
 
-        self.rewritten_programs = [QuantifiedProgram(f"{self.original_programs[0].rules}\n{flipped_constraint_with_weak}\n{dummy_fact}",  self.original_programs[0].weak_constraints, ProgramQuantifier.EXISTS, "", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}"])), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set())]
+        self.rewritten_programs = [QuantifiedProgram(f"{self.original_programs[0].rules}\n{flipped_constraint_with_weak}",  self.original_programs[0].weak_constraints, ProgramQuantifier.EXISTS, "", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"])), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set())]
         self.update_programs()
 
     def rewrite_forall_weak_c(self):
         # print("Rewriting a forall weak c program")
         c = self.original_programs[1]
 
-        flipConstraintRewriter = FlipConstraintRewriter(f"{SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}", False)
+        flipConstraintRewriter = FlipConstraintRewriter(f"{SolverSettings.UNSAT_C_PREDICATE}", False)
         parse_string(c.rules, lambda stm: (flipConstraintRewriter(stm)))
-        weak_constraint = f":~not {SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
+        weak_constraint = f":~not {SolverSettings.UNSAT_C_PREDICATE}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
         flipped_constraint = "\n".join(flipConstraintRewriter.program)
         flipped_constraint_with_weak = f"{flipped_constraint}\n{weak_constraint}"
 
-        dummy_fact = f"{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}.\n:~{SolverSettings.DUMMY_WEAK_PREDICATE_NAME}. [{SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
 
-        self.rewritten_programs = [QuantifiedProgram(f"{self.original_programs[0].rules}\n{flipped_constraint_with_weak}\n{dummy_fact}",  self.original_programs[0].weak_constraints, ProgramQuantifier.FORALL, "", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_PREDICATE_PREFIX}{c.name}"])), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set())]
+        self.rewritten_programs = [QuantifiedProgram(f"{self.original_programs[0].rules}\n{flipped_constraint_with_weak}",  self.original_programs[0].weak_constraints, ProgramQuantifier.FORALL, "", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"])), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set())]
         self.update_programs()
 
 

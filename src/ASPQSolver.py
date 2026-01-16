@@ -25,8 +25,10 @@ from .QuantifiedProgram import QuantifiedProgram
 class ASPQSolver:
     programs_handler : ProgramsHandler
     ctl_move : clingo.Control
+    ctl_move_has_weak : bool
     ctl_move_weak_observer : WeakObserver
     ctl_countermove : clingo.Control
+    ctl_countermove_has_weak : bool
     ctl_countermove_weak_observer : WeakObserver
     assumptions : list
     symbols_defined_in_first_program : dict
@@ -57,6 +59,15 @@ class ASPQSolver:
     p1_predicates_are_output : bool
     counterexample_found : int
     optimum_found : bool
+    fail_atoms : list
+    dominated_atoms : list
+    violated_constraint_atoms : list
+    violated_global_weak_atoms : list
+    fail_found : bool
+    dominated_found : bool
+    violated_constraint_found : bool
+    violated_global_bound_found : bool
+    unsat_c_predicate_found : bool
 
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
@@ -66,7 +77,7 @@ class ASPQSolver:
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
         #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
-        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak)
+        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak)
         self.program_levels = len(self.programs_handler.programs_list) -1
         self.assumptions = []
         self.counterexample_rewriter = None
@@ -97,10 +108,27 @@ class ASPQSolver:
         self.p1_predicates_are_output = len(self.programs_handler.p(0).output_predicates) == 0
         self.counterexample_found = 0
         self.optimum_found = False
-        
+        self.fail_atoms = []
+        self.dominated_atoms = []
+        self.violated_constraint_atoms = []
+        self.violated_global_weak_atoms = []
+        self.ctl_move_has_weak = False
+        self.fail_found = False
+        self.dominated_found = False
+        self.violated_constraint_found = False
+        self.violated_global_bound_found = False
+        self.ctl_countermove_has_weak = False
+        self.unsat_c_predicate_found = False
+
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control() #["--sign-def=neg"]
+        self.ctl_move.configuration.solve.opt_mode = "optN"
+        self.ctl_move.configuration.solve.models = "0"
+
+        #used to search for unsat_c when ASPQ programs have local weak (in counterexample or in candidate for 1-ASPQ)
+        self.unsat_c_atom = clingo.Function(SolverSettings.UNSAT_C_PREDICATE, [])
+
         self.settings.logger.debug("%sAdded First program to ctl move:\n%s", self.output_pad, self.programs_handler.p(0).rules)
         self.ctl_move.add(self.programs_handler.p(0).rules)
 
@@ -108,6 +136,8 @@ class ASPQSolver:
             #add weak
             weak_repr = "\n".join(str(weak) for weak in self.programs_handler.p(0).weak_constraints)
             self.settings.logger.debug("%sAdded First program weak constraints to ctl move:\n%s", self.output_pad, weak_repr)
+            if len(self.programs_handler.p(0).weak_constraints) > 0:
+                self.ctl_move_has_weak = True
             self.ctl_move.add(weak_repr)
             self.ctl_move_weak_observer = WeakObserver()
             self.ctl_move.register_observer(self.ctl_move_weak_observer)
@@ -144,13 +174,13 @@ class ASPQSolver:
             if self.programs_handler.p(1).contains_weak():
                 self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                 self.refinement_rewriter.compute_placeholder_program()
-                self.ctl_move.add(self.refinement_rewriter.dummy_refinement_weaks())
-                self.settings.logger.debug("%sAdded dummy weak program to ctl move:\n%s", self.output_pad, self.refinement_rewriter.dummy_refinement_weaks())
+                self.ctl_move_has_weak = True
             
             if not self.programs_handler.global_weak_program is None:
                 cost_global_constraint_rewriter = CostRewriter(self.programs_handler.global_weak_program, SolverSettings.GLOBAL_WEAK_VIOLATION_ATOM_NAME, "", "", True, False)
                 cost_global_constraint_rewriter.rewrite()
                 self.ctl_move.add(cost_global_constraint_rewriter.rewritten_program)
+                self.ctl_move_has_weak = True
                 self.settings.logger.debug("%sAdded cost program for global weak to ctl move:\n%s", self.output_pad, cost_global_constraint_rewriter.rewritten_program)
             
             self.ctl_move.ground()
@@ -178,11 +208,6 @@ class ASPQSolver:
                     self.choice_str += sub_choice_str
                     self.settings.logger.debug("%sConstructed choice:\n%s", self.output_pad, self.choice_str)
 
-            if self.programs_handler.p(0).contains_weak():
-                pay_dummy_program = self.ctl_move_weak_observer.pay_dummy_program()
-                self.settings.logger.debug("%sadded dummy_weak for P_1 to ctl move:\n%s", self.output_pad, pay_dummy_program)
-                self.ctl_move.add("dummy_weak", [], pay_dummy_program)
-                self.ctl_move.ground([("dummy_weak", [])])
             
             #ground the second program with its cost rewriting and with the choice from the first program    
             #add level facts inside first program
@@ -201,15 +226,11 @@ class ASPQSolver:
                 self.ctl_move.add("levels", [], level_facts_str)
                 self.ctl_move.ground([("levels", [])])
                 
-            # add dummy cost program for global weak constraints
-            if not self.refinement_global_weak_rewriter is None:
-                pay_dummy_program_global = self.refinement_global_weak_rewriter.pay_dummy_program()
-                self.settings.logger.debug("%sadded dummy_weak for global weak constraints to ctl move:\n%s", self.output_pad, pay_dummy_program_global)
-                self.ctl_move.add("dummy_weak_global", [], pay_dummy_program_global)
-                self.ctl_move.ground([("dummy_weak_global", [])])
 
             if self.program_levels == 2:
                 self.ctl_countermove = clingo.Control()
+                self.ctl_countermove.configuration.solve.opt_mode = "optN"
+                self.ctl_countermove.configuration.solve.models = "0"
                 self.settings.logger.debug("%sadded choice to ctl countermove:\n%s", self.output_pad, self.choice_str)
                 self.ctl_countermove.add(self.choice_str)
                 self.ctl_countermove.add(self.programs_handler.p(1).rules)
@@ -225,6 +246,7 @@ class ASPQSolver:
                 else:
                     weak_repr = "\n".join(str(weak) for weak in self.programs_handler.p(1).weak_constraints)
                     self.ctl_countermove.add(weak_repr)
+                    self.ctl_countermove_has_weak = True
                     self.settings.logger.debug("%sadded weak to ctl countermove:\n%s", self.output_pad, weak_repr)
                     self.relaxed_rewriter = RelaxedRewriter(SolverSettings.WEAK_NO_MODEL_LEVEL, SolverSettings.UNSAT_C_PREDICATE)
 
@@ -239,19 +261,31 @@ class ASPQSolver:
                     self.ctl_countermove.register_observer(self.ctl_countermove_weak_observer)
 
                 self.ctl_countermove.ground()
-                if self.programs_handler.p(1).contains_weak():
-                    pay_dummy_program = self.ctl_countermove_weak_observer.pay_dummy_program()
-                    self.settings.logger.debug("%sadded dummy_weak to ctl countermove:\n%s", self.output_pad, pay_dummy_program)
-                    self.ctl_countermove.add("dummy_weak", [], pay_dummy_program)
-                    self.ctl_countermove.ground([("dummy_weak", [])])
 
     def on_candidate(self, model):
         self.current_candidate_cost = model.cost
         self.current_candidate = model.symbols(shown=True)
-
+        if not self.programs_handler.global_weak_program is None:
+            self.violated_global_bound_found = any(model.contains(atom) for atom in self.violated_global_weak_atoms)
+        if self.ctl_move_has_weak:    
+            #check if all fail dominated and violated_constraint are in model
+            if model.optimality_proven:
+                if self.program_levels == 1:
+                    self.unsat_c_predicate_found = model.contains(self.unsat_c_atom)
+                self.fail_found = any(model.contains(fail_atom) for fail_atom in self.fail_atoms)
+                self.dominated_found = any(model.contains(dominated_atom) for dominated_atom in self.dominated_atoms)
+                self.violated_constraint_found = any(model.contains(violated_constraint_atom) for violated_constraint_atom in self.violated_constraint_atoms)
+            return not model.optimality_proven
+        return False
+        
     def on_counterexample(self, model):
         self.current_counterexample_cost = model.cost
         self.current_counterexample = model.symbols(shown=True)
+        if self.ctl_countermove_has_weak:           
+            if model.optimality_proven:
+                self.unsat_c_predicate_found = model.contains(self.unsat_c_atom)
+            return not model.optimality_proven 
+        return False
 
     def finished_search_for_candiate(self, result):
         if not result.unsatisfiable:
@@ -282,7 +316,11 @@ class ASPQSolver:
         self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
 
     def print_projected_model(self, model):
+        if self.settings.collapse_global_weak:
+            print(self.current_candidate_cost)
         self.model_printer.print_model(model, self.output_symbols_defined_in_first_program)
+        if self.settings.collapse_global_weak:
+            print("OPTIMUM FOUND")
 
     #solve function for ASPQ with n levels
     def solve_n_levels(self, external_assumptions, choice_str):
@@ -298,10 +336,11 @@ class ASPQSolver:
                 if self.exists_first:
                     if not self.programs_handler.global_weak_program is None:
                         current_upper_bound, cost_print = self.refinement_global_weak_rewriter.compute_cost_and_new_upper_bound(self.current_candidate_symbols_set)
+                        self.violated_global_weak_atoms.append(clingo.Function(self.refinement_global_weak_rewriter.current_violated_bound_atom_name , []))
                         self.settings.logger.debug("%sCurrent upper bound: %s", self.output_pad, current_upper_bound)
                         #last model is optimum
                         #TODO put the cost equal to 2 when enumeration is enabled
-                        if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
+                        if self.violated_global_bound_found:
                             if not self.programs_handler.global_weak_program is None:
                                 print("OPTIMUM FOUND")
                                 self.optimum_found = True
@@ -311,10 +350,9 @@ class ASPQSolver:
                         else:
                             print(f"OPTIMIZATION: {cost_print}")
                             #add constraint with new bound                                    
-                            self.ctl_move.add(current_upper_bound)
-                            self.ctl_move.add(f"optimization_{SolverStatistics().solvers_iterations}", [], current_upper_bound)
-                            self.ctl_move.ground([(f"optimization_{SolverStatistics().solvers_iterations}", [])])
                             self.settings.logger.debug("%sAdding cost constraint to ctl move %s", self.output_pad, current_upper_bound)
+                            self.ctl_move.add(f"optimization_{self.refinement_global_weak_rewriter.iteration}", [], current_upper_bound)
+                            self.ctl_move.ground([(f"optimization_{self.refinement_global_weak_rewriter.iteration}", [])])
                     else:
                         self.models_found += 1
                     if self.main_solver:
@@ -334,9 +372,6 @@ class ASPQSolver:
                         SolverStatistics().model_found()
                     return True 
                  
-                #enumeration of quantified models for ASPQ^W programs is not possible
-                if self.programs_handler.program_contains_weak():
-                    return self.models_found > 0 
             else:
                 #program starts with forall and is unsat
                 if not self.exists_first:
@@ -363,10 +398,11 @@ class ASPQSolver:
                 #forall wins if P_1 \cup \neg C unsat
                 return False if self.programs_handler.last_exists() else True
             if self.programs_handler.p(0).contains_weak():
-                if self.current_candidate_cost[-1] == SolverSettings.WEIGHT_FOR_DUMMY_CONSTRAINTS:
-                    return True if self.programs_handler.last_exists() else False
-                else:
-                    return False if self.programs_handler.last_exists() else True
+                #for 1-ASPQW, global weak constraints are added inside P_1 and unsat_c is always added at level -1
+                if not self.unsat_c_predicate_found:
+                    return True
+                else:#unsat_c found 
+                    return False
             #exists wins if P_1 \cup C sat
             #forall looses if P_1 \cup \neg C sat            
             return True if self.programs_handler.last_exists() else False
@@ -393,32 +429,25 @@ class ASPQSolver:
                     self.settings.logger.debug("%sCandidate cost: %s", self.output_pad, self.current_candidate_cost)
                     #check if current candidate violates the bound constraint
                     if not self.programs_handler.global_weak_program is None:
-                        if self.current_candidate_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
+                        if self.violated_global_bound_found:
                             return False
                     #Weak refinement introduces weak constraints in the first program
                     #the ASPQ is unsatisfiable when either the move program is unsatisfiable or there is no other 
                     #model left from P_1 that does not admit any countermove - this condition is detected by the
                     #weak constraints at the lowest priority introduced by the refinement
                     if self.programs_handler.p(1).contains_weak():
-                        #at least the cost of the three weaks introduced by the weak refinement must be present in the cost vector of the current model
-                        #but if not refinement was made, the cost vector could be shorter. In that case the program is unsat iff ctl_move yields unsat
-                        if self.programs_handler.global_weak_program is None: # no dummy for weaks of C
-                            assert len(self.current_candidate_cost) >= 3
-                            #when cost ends with [1,1,1] it means that it was not possible to find M_1 \in optAS(P1) s.t. M_1 admits none of the countermoves found so far 
-                            if all(cost >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS for cost in self.current_candidate_cost[-3:]):
-                                return True if self.programs_handler.forall_first() else False
-                        else: # dummy for weaks of C at lowest priority
-                            assert len(self.current_candidate_cost) >= 4
-                            if all(cost >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS for cost in self.current_candidate_cost[-4:-1]):
-                                return True if self.programs_handler.forall_first() else False
-                            
+                        #No new candidate if not fail, not dominated and violated constraint (i.e., there is at least one CE that is again a CE for any possible candidate)
+                        if not self.fail_found and not self.dominated_found and self.violated_constraint_found:
+                            return True if self.programs_handler.forall_first() else False
+                    elif self.programs_handler.p(0).contains_weak():
+                        if self.violated_constraint_found:
+                            return True if self.programs_handler.forall_first() else False        
                         
                     self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
                     self.construct_assumptions()
                     #search for counterexample
                     self.settings.logger.debug("%sSearching for counterexample", self.output_pad)
                     result = self.ctl_countermove.solve(assumptions=self.assumptions + self.external_assumptions, on_model=self.on_counterexample, on_finish=self.finished_search_for_counterexample)
-                    
                     #winning move for the first quantifier - no recursive call for 2-ASPQ
                     if result.unsatisfiable:
                         self.settings.logger.debug("%sNo counterexample found", self.output_pad)
@@ -428,31 +457,31 @@ class ASPQSolver:
                     #unsat_c \in model means that ctr(\Pi) is unsatisfiable, which means no counterexample exists
                     #:~unsat_c was added to detect this case when the countermove ctl was created
                     if self.programs_handler.p(1).contains_weak():
-                        assert len(self.current_counterexample_cost) > 0
                         self.settings.logger.debug("%sCounterexample cost %s", self.output_pad, self.current_counterexample_cost)
-                        if self.current_counterexample_cost[-1] >= SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS:
+                        if self.unsat_c_predicate_found:
                             self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                             return True if self.programs_handler.exists_first() else False
                     self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.current_counterexample)
                     self.counterexample_found += 1
                     SolverStatistics().counterexample_found()
                     if self.refinement_rewriter is None:
-                        if not self.programs_handler.p(1).contains_weak():
+                        if not self.programs_handler.program_contains_weak():
                             self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                             self.refinement_rewriter.compute_placeholder_program()
                         else:
                             self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                             self.refinement_rewriter.compute_placeholder_program()
+                            self.ctl_move_has_weak = True
                     self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
                     refine_program = self.refinement_rewriter.refined_program()
                     
-                    #Add a new external predicate
+                    #Add a new external predicate and store new refinement predicates (fail_M, dominated_M, violated_condition_M)
                     if self.programs_handler.p(1).contains_weak():
                         refine_program += f"#external {self.refinement_rewriter.external_predicates[-1]}.\n"
+                        self.fail_atoms.append(clingo.Function(self.refinement_rewriter.current_fail_predicate, []))
+                        self.dominated_atoms.append(clingo.Function(self.refinement_rewriter.current_dominated_predicate, []))
+                        self.violated_constraint_atoms.append(clingo.Function(self.refinement_rewriter.current_unsat_c_predicate, []))
                     
-                    #add cost program for current candiate
-                    if self.programs_handler.p(0).contains_weak():
-                        refine_program += ""
                     self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refine_program)
                     self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
                     self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])

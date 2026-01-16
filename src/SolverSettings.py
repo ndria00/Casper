@@ -3,7 +3,6 @@ from .QuantifiedProgram import QuantifiedProgram
 
 class SolverSettings:
 
-    DUMMY_WEAK_PREDICATE_NAME : str = "dummy"
     DOMINATED_ATOM_NAME : str = "dominated"
     CLONE_ATOM_SUFFIX : str = "_clone"
     COST_AT_LEVEL_ATOM_NAME : str = "cost_at_level"
@@ -20,14 +19,11 @@ class SolverSettings:
     EXTERNAL_PREDICATE_FOR_ACTIVATE_CONSTRAINT : str = "external"
     EXTERNAL_PREDICATE_FOR_ACTIVATE_COST_CONSTRAINT : str = "external_cost"
     FLAG_ATOM_NAME : str = "flag_"
-    DUMMY_REFINEMENT_PREDICATE = "dummy_ref"
-    DUMMY_GLOBAL_PREDICATE = "dummy_global"
     RELAXED_CPREDICATE : str = "violated_constraint"
     UNSAT_C_PREDICATE : str = "unsat_c"
     FOUND_LEVEL : str = "found_level"
 
-    WEIGHT_FOR_DUMMY_CONSTRAINTS: int = 1
-    WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS: int = 2
+    WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS: int = 1
 
     WEAK_NO_MODEL_LEVEL : int = QuantifiedProgram.MIN_WEAK_LEVEL -1
     WEAK_NOT_DOMINATED_LEVEL : int = QuantifiedProgram.MIN_WEAK_LEVEL -2
@@ -41,8 +37,9 @@ class SolverSettings:
     logger : logging.Logger
     ground_transformation : bool
     no_weak : bool
+    collapse_global_weak : bool
 
-    def __init__(self, n_models, debug, constraint_print, ground_transformation, no_weak):
+    def __init__(self, n_models, debug, constraint_print, ground_transformation, no_weak, collapse_global_weak=False):
         self.ground_transformation = ground_transformation
         self.n_models = n_models
         self.debug = debug
@@ -50,6 +47,7 @@ class SolverSettings:
         self.no_weak = no_weak
         self.enumeration = True if n_models == 0 else False
         self.setup_logging(self.debug)
+        self.collapse_global_weak = collapse_global_weak
 
     def setup_logging(self, debug: bool):
         logging.basicConfig()
