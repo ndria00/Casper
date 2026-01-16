@@ -335,6 +335,7 @@ class ASPQSolver:
                     if not self.programs_handler.global_weak_program is None:
                         current_upper_bound, cost_print = self.refinement_global_weak_rewriter.compute_cost_and_new_upper_bound(self.current_candidate_symbols_set)
                         self.violated_global_weak_atoms.append(clingo.Function(self.refinement_global_weak_rewriter.current_violated_bound_atom_name , []))
+                        self.ctl_move_has_weak = True
                         self.settings.logger.debug("%sCurrent upper bound: %s", self.output_pad, current_upper_bound)
                         #last model is optimum
                         #TODO put the cost equal to 2 when enumeration is enabled
