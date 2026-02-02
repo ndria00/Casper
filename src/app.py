@@ -39,21 +39,29 @@ def entrypoint():
             exit(1)
 
     split_program_rewriter = SplitProgramRewriter(encoding_program)
+    problem_has_global_weak = False
+    collapse_global_weak_in_p1 = args.global_weak_lower_bound
+    if not split_program_rewriter.global_weak is None and collapse_global_weak_in_p1:
+        problem_has_global_weak = True
     collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
     solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.propositional_program, bool(args.no_weak), collapse_global_weak_in_p1)
 
     weak_rewriter = WeakRewriter(split_program_rewriter, solver_settings.no_weak, collapse_global_weak_in_p1)
     #check if rewritten program contains weak (for example, in \exists_weak \exist programs weak are never rewritten) 
     solver_settings.no_weak = solver_settings.no_weak or weak_rewriter.rewritten_program_contains_weak
-
+    
     programs_handler = ProgramsHandler(weak_rewriter.rewritten_program(), instance_program, weak_rewriter.global_weak)
     programs_handler.check_aspq_type()
+    if programs_handler.program_contains_weak():
+        solver_settings.n_models = 1
     solver  = ASPQSolver(programs_handler, solver_settings, True, 0)
     result = solver.solve_n_levels([], "")
     if result:
         if bool(args.statistics):
             SolverStatistics().print_statistics()
         print("ASPQ SAT")
+        if problem_has_global_weak:
+            exit(30)
         exit(10 if not solver.optimum_found else 30)
     else:
         if bool(args.statistics):

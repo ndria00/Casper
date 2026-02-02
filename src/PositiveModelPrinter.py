@@ -8,5 +8,5 @@ class PositiveModelPrinter(ModelPrinter):
         print("Model:{", end="")
         for symbol in model:
             if symbol in p1_symbols:
-                print(symbol, ". ",end="")
+                print(f"{symbol}.",end=" ")
         print("}")
