@@ -15,18 +15,18 @@ usage: Casper [-h] --problem PROBLEM [--instance INSTANCE] [--debug] [--constrai
 A native solver based on CEGAR for 2-ASP(Q)
 
 options:
-  -h, --help           show this help message and exit
-  --problem PROBLEM    path to problem file
-  --instance INSTANCE  path to instance file
-  --debug              enable debug
-  --constraint         enable constraint print of models
-  --relaxed            pick first model as a model of the union of relaxed programs
-  -n N                 number of q-answer sets to compute (if zero enumerate)
+  -h, --help                    show this help message and exit
+  --problem PROBLEM             path to problem file
+  --instance INSTANCE           path to instance file
+  --debug                       enable debug
+  --global-weak-lower-bound     Apply lower bound improving for global weak constraints (default is upper bound improving)
+  --statistics                  print solving statistics
+  --constraint                  enable constraint print of models
+  -n N                          number of q-answer sets to compute (if zero enumerate) - does not apply to ASPQ programs with weak constraints
 
 The --instance option can be used to make transformations more efficient
 
-The --relaxed option may be used for avoiding to pick the first model at random (it tries to take an answer set of the first program for which an answer set of the second exists)
 
 The --constraint option can be used to print each quantified answer set as a set of constraints. The output can be used to verify the correctness of computed models.
 
-By default the solver does not used relaxation, computes only one ansswer set and expect the instance of the problem to be inside the problem file.
+By default the solver computes only one answer set and expects the instance of the problem to be inside the problem file.
