@@ -221,12 +221,13 @@ class ReductRewriter(clingo.ast.Transformer):
 
                     self.suffix_n_literals[self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N] = node.head.atom.symbol.name #self.suffix_n
                     f_2 = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N, node.head.atom.symbol.arguments, False)
-                    #l_1 = clingo.ast.Literal(node.location, False, f_1)
-                    #l_2 = clingo.ast.Literal(node.location, True, f_2)
+                    l_1 = clingo.ast.Literal(node.location, False, f_1)
+                    l_2 = clingo.ast.Literal(node.location, True, f_2)
                     self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
                     fail_head = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
-                    #fail_body = [l_1, l_2]
-                    #self.placeholder_program = self.placeholder_program + str(clingo.ast.Rule(node.location, fail_head, fail_body)) + "\n"
+                    fail_body = [l_1, l_2]
+                    self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
+                    
                     nl_1 = clingo.ast.Literal(node.location, True, f_1)
                     nl_2 = clingo.ast.Literal(node.location, False, f_2)
                     fail_body = [nl_1, nl_2]
