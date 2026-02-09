@@ -2,6 +2,8 @@ from pathlib import Path
 import clingo
 from clingo.ast import parse_string
 
+from .ASPChefModelPrinter import ASPChefModelPrinter
+from .ClingoLogger import ClingoLogger
 from .CostRewriter import CostRewriter
 from .RefinementGlobalWeakRewriter import RefinementGlobalWeakRewriter
 from .WeakObserver import WeakObserver
@@ -68,6 +70,7 @@ class ASPQSolver:
     violated_constraint_found : bool
     violated_global_bound_found : bool
     unsat_c_predicate_found : bool
+    clingo_logger : ClingoLogger
 
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
@@ -77,13 +80,19 @@ class ASPQSolver:
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
         #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
-        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak)
+        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak, self.settings.json_format)
         self.program_levels = len(self.programs_handler.programs_list) -1
         self.assumptions = []
         self.counterexample_rewriter = None
         self.refinement_rewriter = None
         self.models_found = 0
-        self.model_printer = PositiveModelPrinter() if not self.settings.constraint_print else ConstraintModelPrinter()
+        if self.settings.constraint_print:
+            self.model_printer = ConstraintModelPrinter()
+        elif self.settings.json_format:
+            self.model_printer = ASPChefModelPrinter()
+        else:
+            self.model_printer = PositiveModelPrinter()
+
         self.exists_first = self.programs_handler.exists_first()
         self.main_solver = main_solver
         self.refinement_global_weak_rewriter = None
@@ -119,10 +128,11 @@ class ASPQSolver:
         self.violated_global_bound_found = False
         self.ctl_countermove_has_weak = False
         self.unsat_c_predicate_found = False
+        self.clingo_logger = ClingoLogger()
 
     def ground_and_construct_choice_interfaces(self):
         choice = []
-        self.ctl_move = clingo.Control() #["--sign-def=neg"]
+        self.ctl_move = clingo.Control(logger=self.clingo_logger.log) 
         self.ctl_move.configuration.solve.opt_mode = "optN"
         self.ctl_move.configuration.solve.models = "0"
 
@@ -210,7 +220,7 @@ class ASPQSolver:
             #ground the second program with its cost rewriting and with the choice from the first program    
             #add level facts inside first program
             if self.programs_handler.p(1).contains_weak():
-                ctl_weak = clingo.Control()
+                ctl_weak = clingo.Control(logger=self.clingo_logger.log)
                 cost_p2_rewriter = CostRewriter(self.programs_handler.p(1),SolverSettings.WEAK_VIOLATION_ATOM_NAME, SolverSettings.LEVEL_COST_ATOM_NAME, SolverSettings.COST_AT_LEVEL_ATOM_NAME, True, False)
                 cost_p2_rewriter.rewrite()
                 ctl_weak.add(self.choice_str + self.programs_handler.p(1).rules + cost_p2_rewriter.rewritten_program_with_aggregate())
@@ -226,7 +236,7 @@ class ASPQSolver:
                 
 
             if self.program_levels == 2:
-                self.ctl_countermove = clingo.Control()
+                self.ctl_countermove = clingo.Control(logger=self.clingo_logger.log)
                 self.ctl_countermove.configuration.solve.opt_mode = "optN"
                 self.ctl_countermove.configuration.solve.models = "0"
                 self.settings.logger.debug("%sadded choice to ctl countermove:\n%s", self.output_pad, self.choice_str)

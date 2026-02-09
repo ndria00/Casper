@@ -16,6 +16,7 @@ def entrypoint():
     parser.add_argument('--global-weak-lower-bound', help="Apply lower bound improving for global weak constraints (default is upper bound improving)\n", required=False, action="store_true")
     parser.add_argument('--no-weak', help="completely remove weak constraints before solve optimization ASP(Q) programs\n", required=False, action="store_true")
     parser.add_argument('--statistics', help="print solving statistics\n", required=False, action="store_true")
+    parser.add_argument('--json', help="print quantified answer sets in json format - done for integration with ASPChef\n", required=False, action="store_true")
     parser.add_argument('--constraint', help="enable constraint print of models\n", required=False, action="store_true")
     parser.add_argument('-n', help="number of q-answer sets to compute (if zero enumerate)\n", default=1)
     args = parser.parse_args()
@@ -44,7 +45,7 @@ def entrypoint():
     if not split_program_rewriter.global_weak is None and collapse_global_weak_in_p1:
         problem_has_global_weak = True
     collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
-    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.propositional_program, bool(args.no_weak), collapse_global_weak_in_p1)
+    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.propositional_program, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json))
 
     weak_rewriter = WeakRewriter(split_program_rewriter, solver_settings.no_weak, collapse_global_weak_in_p1)
     #check if rewritten program contains weak (for example, in \exists_weak \exist programs weak are never rewritten) 
@@ -59,12 +60,14 @@ def entrypoint():
     if result:
         if bool(args.statistics):
             SolverStatistics().print_statistics()
-        print("ASPQ SAT")
+        if not solver_settings.json_format:
+            print("ASPQ SAT")
         if problem_has_global_weak:
             exit(30)
         exit(10 if not solver.optimum_found else 30)
     else:
         if bool(args.statistics):
             SolverStatistics().print_statistics()
-        print("ASPQ UNSAT")
+        if not solver_settings.json_format:
+            print("ASPQ UNSAT")
         exit(20)
