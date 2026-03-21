@@ -293,8 +293,8 @@ class ASPQSolver:
             if model.optimality_proven:
                 if self.program_levels == 1:
                     self.unsat_c_predicate_found = model.contains(self.unsat_c_atom)
-                self.fail_found = any(model.contains(fail_atom) for fail_atom in self.fail_atoms)
-                self.dominated_found = any(model.contains(dominated_atom) for dominated_atom in self.dominated_atoms)
+                self.fail_found = all(model.contains(fail_atom) for fail_atom in self.fail_atoms)
+                self.dominated_found = all(model.contains(dominated_atom) for dominated_atom in self.dominated_atoms)
                 self.violated_constraint_found = any(model.contains(violated_constraint_atom) for violated_constraint_atom in self.violated_constraint_atoms)
             return not model.optimality_proven
         return False
