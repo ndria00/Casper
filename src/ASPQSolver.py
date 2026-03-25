@@ -503,6 +503,7 @@ class ASPQSolver:
                         refine_program += f"#external {self.refinement_rewriter.external_predicates[-1]}.\n"
                         self.fail_atoms.append(clingo.Function(self.refinement_rewriter.current_fail_predicate, []))
                         self.dominated_atoms.append(clingo.Function(self.refinement_rewriter.current_dominated_predicate, []))
+                    if self.programs_handler.p(0).contains_weak():
                         self.violated_constraint_atoms.append(clingo.Function(self.refinement_rewriter.current_unsat_c_predicate, []))
                     
                     self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refine_program)
