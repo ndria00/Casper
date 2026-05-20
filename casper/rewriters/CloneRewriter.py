@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import clingo
-from .QuantifiedProgram import QuantifiedProgram
 from clingo.ast import parse_string
+from casper.language import QuantifiedProgram
 
 
 class CloneRewriter(clingo.ast.Transformer):

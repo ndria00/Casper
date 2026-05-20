@@ -12,8 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 from clingo.ast import parse_string
-from .FlipConstraintRewriter import FlipConstraintRewriter
-from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
+from casper.rewriters import FlipConstraintRewriter
+from casper.language import QuantifiedProgram 
+from casper.language import ProgramQuantifier
 from enum import Enum
 
 class ASPQType(str, Enum):
@@ -30,10 +31,10 @@ class ProgramsHandler:
     program_type : ASPQType
 
     def flip_constraint(self):
-        flipConstraintRewriter = FlipConstraintRewriter(f"{self.FLIP_CONSTRAINT_PREDICATE_NAME}{len(self.programs_list)}")
+        flip_constraint_rewriter = FlipConstraintRewriter(f"{self.FLIP_CONSTRAINT_PREDICATE_NAME}{len(self.programs_list)}")
         constraint_program = self.programs_list[len(self.programs_list)-1]
-        parse_string(constraint_program.rules, lambda stm: (flipConstraintRewriter(stm)))
-        self.flipped_constraint = QuantifiedProgram(rules="\n".join(flipConstraintRewriter.program), weak_constraints=[], program_type=ProgramQuantifier.CONSTRAINTS, program_name=constraint_program.name, head_predicates=flipConstraintRewriter.head_predicates) 
+        parse_string(constraint_program.rules, lambda stm: (flip_constraint_rewriter(stm)))
+        self.flipped_constraint = QuantifiedProgram("\n".join(flip_constraint_rewriter.program), [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, flip_constraint_rewriter.head_predicates, False, False) 
 
     def p(self, idx):
         if idx < 0 or idx >= len(self.programs_list):

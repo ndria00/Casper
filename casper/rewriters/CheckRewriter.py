@@ -11,10 +11,10 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-from .SolverSettings import SolverSettings
+from casper.utils import SolverSettings
+from casper.language import QuantifiedProgram
 from .CloneRewriter import CloneRewriter
 from .CostRewriter import CostRewriter
-from .QuantifiedProgram import QuantifiedProgram
 
 
 class CheckRewriter:
@@ -65,7 +65,7 @@ class CheckRewriter:
             #I should rewrite to the clone signature both predicates from cost program and from the original program
             self.clone_suffix = f"{suffix}{SolverSettings.CLONE_ATOM_SUFFIX}"
             self.cost_program_level_predicate_clone = f"{SolverSettings.LEVEL_COST_ATOM_NAME}{self.clone_suffix}"
-            self.clone_cost_rewriter = CloneRewriter(QuantifiedProgram(cost_program_no_suffix, [], self.program.program_type, "", self.program.head_predicates | self.cost_rewriter.rewritten_program_head_predicates_with_aggregate), self.clone_suffix, set([SolverSettings.LEVEL_COST_ATOM_NAME]) if not self.rewrite_level_predicate else set())
+            self.clone_cost_rewriter = CloneRewriter(QuantifiedProgram(cost_program_no_suffix, [], self.program.program_type, "", self.program.head_predicates | self.cost_rewriter.rewritten_program_head_predicates_with_aggregate, self.program.contains_choice, self.program.contains_disjunction), self.clone_suffix, set([SolverSettings.LEVEL_COST_ATOM_NAME]) if not self.rewrite_level_predicate else set())
             self.clone_cost_rewriter.rewrite()
             self.clone_cost_program = self.clone_cost_rewriter.rewritten_program
         self.construct_dominated_program(suffix)

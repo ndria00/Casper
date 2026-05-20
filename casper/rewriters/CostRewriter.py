@@ -12,13 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import clingo
+from clingo.ast import parse_string
 import re
 
-from .SolverSettings import SolverSettings
-from .WeakConstraint import WeakConstraint
-from .OrProgramRewriter import OrProgramRewriter
-from .QuantifiedProgram import QuantifiedProgram
-from clingo.ast import parse_string
+from casper.utils import SolverSettings
+from casper.language import WeakConstraint
+from casper.language import QuantifiedProgram
 
 class CostRewriter(clingo.ast.Transformer):
     

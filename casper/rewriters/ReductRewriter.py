@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import clingo 
-from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
+from casper.language import QuantifiedProgram, ProgramQuantifier
 from clingo.ast import parse_string
 import re
 
@@ -27,7 +27,7 @@ class ReductRewriter(clingo.ast.Transformer):
     ANNOTATION_OPEN_F : str = '>'
     ANNOTATION_CLOSE_F : str = '<'
 
-    original_programs_list : list
+    original_programs_list : list[QuantifiedProgram]
     placeholder_programs_list_rules : list
     rewritten_programs_list : list
     rewritten_programs_list_rules : list
@@ -43,6 +43,7 @@ class ReductRewriter(clingo.ast.Transformer):
     parsing_first_program: bool
     to_rewrite_predicates : set
     current_fail_predicate : str
+    aggregate_reduct: bool
 
     def __init__(self, original_programs, suffix_p, suffix_n, fail_atom_name, ground_transformation):
         self.original_programs_list = original_programs
@@ -59,19 +60,15 @@ class ReductRewriter(clingo.ast.Transformer):
         self.fail_literals = dict()
         self.to_rewrite_predicates = set()
         self.current_fail_predicate = ""
+        self.aggregate_reduct = False
         #refine
         for i in range(len(self.original_programs_list)):
+            if self.original_programs_list[i].contains_aggregates:
+                self.aggregate_reduct = True
             self.to_rewrite_predicates = self.to_rewrite_predicates | self.original_programs_list[i].head_predicates
-
 
         self.parsing_first_program = False
         
-    def replace_or_simplify(self, m):
-        #matches are of the form not <pred_name>
-        pred_name = m.group(0)[5:len(m.group(0))-1]
-        if pred_name in self.model_symbols_set:
-            self.erase_rule = True
-        return ""
 
     def rewrite(self, counterexample, iteration):
         self.rewritten_programs_list = []
@@ -81,35 +78,14 @@ class ReductRewriter(clingo.ast.Transformer):
         self.current_fail_predicate = f"{self.fail_atom_name}{iteration}"
 
         for i in range(len(self.original_programs_list)):
+
             self.rewritten_programs_list_rules[i] = self.placeholder_programs_list_rules[i]
-            if not self.ground_transformation:
+            if not len(self.suffix_p_literals) == 0:
                 self.rewritten_programs_list_rules[i] = self.pattern_suffix_p.sub(lambda a : self.suffix_p_literals[a.group(0)] + suffix_p_iteration, self.rewritten_programs_list_rules[i])
+            if not len(self.suffix_n_literals) == 0:
                 self.rewritten_programs_list_rules[i] = self.pattern_suffix_n.sub(lambda a : self.suffix_n_literals[a.group(0)] + suffix_n_iteration, self.rewritten_programs_list_rules[i])
+            if not len(self.fail_literals) == 0:
                 self.rewritten_programs_list_rules[i] = self.pattern_fail.sub(lambda a : self.fail_literals[a.group(0)] + str(iteration), self.rewritten_programs_list_rules[i])
-            else:
-                #TODO this is a prototype. Update to work with ground non-propositional programs
-                self.rewritten_program  = []
-                self.model_symbols_set = set()
-                for symbol in counterexample:
-                    self.model_symbols_set.add(str(symbol))
-
-                for rule in self.placeholder_programs_list_rules[i]:
-                    self.erase_rule = False
-                    #replace suffix_n
-                    rule = self.pattern_suffix_n_negated.sub(self.replace_or_simplify, rule)
-
-                    #if false negated literal in rule ignore, otherwise replace suffix_p
-                    if not self.erase_rule:
-                        rule = self.pattern_suffix_n.sub(lambda a : self.suffix_n_literals[a.group(0)] + suffix_n_iteration, rule)
-                        rule = self.pattern_suffix_p.sub(lambda a : self.suffix_p_literals[a.group(0)] + suffix_p_iteration, rule)
-                        #no negative false literal in the body - just clear the rule from remaining chars
-                        #remove extra chars remained after sub
-                        rule = rule.replace(" ;", "")
-                        rule = rule.replace("; .", ".")
-                        rule = self.pattern_fail.sub(lambda a : self.fail_literals[a.group(0)] + str(iteration), rule)
-                        self.rewritten_program.append(rule)
-
-                self.rewritten_programs_list_rules[i] = "\n".join(self.rewritten_program)
 
             prg_name = self.original_programs_list[i].name
             #flip quantifiers if the first program is \forall (i.e. the outermost program was an \exists)
@@ -123,7 +99,7 @@ class ReductRewriter(clingo.ast.Transformer):
             for pred in self.original_programs_list[i].head_predicates:
                 rewritten_preds.add(f"{pred}{suffix_p_iteration}")
             #this could have weaks
-            self.rewritten_programs_list.append(QuantifiedProgram(self.rewritten_programs_list_rules[i], [], quantifier, prg_name, rewritten_preds))
+            self.rewritten_programs_list.append(QuantifiedProgram(self.rewritten_programs_list_rules[i], [], quantifier, prg_name, rewritten_preds, self.original_programs_list[i].contains_choice, self.original_programs_list[i].contains_disjunction))
            
         #add rewritten constraint program
         prg_name = self.original_programs_list[-1].name
@@ -157,16 +133,15 @@ class ReductRewriter(clingo.ast.Transformer):
                             for condition in el.condition:
                                 if condition.ast_type == clingo.ast.ASTType.Literal:
                                     if not condition.atom is None:
-                                        if condition.atom.symbol.name in self.original_programs_list[0].head_predicates:
-                                            if condition.sign:
-                                                self.suffix_n_literals[self.ANNOTATION_OPEN_N + condition.atom.symbol.name + self.ANNOTATION_CLOSE_N] = condition.atom.symbol.name
-                                                new_term = clingo.ast.Function(condition.location, self.ANNOTATION_OPEN_N + condition.atom.symbol.name + self.ANNOTATION_CLOSE_N)
-                                            else:
-                                                self.suffix_p_literals[self.ANNOTATION_OPEN_P + condition.atom.symbol.name + self.ANNOTATION_CLOSE_P] = condition.atom.symbol.name
-                                                new_term = clingo.ast.Function(condition.location, self.ANNOTATION_OPEN_P + condition.atom.symbol.name + self.ANNOTATION_CLOSE_P)
-                                            new_atom = clingo.ast.SymbolicAtom(new_term)
-                                            new_literal = clingo.ast.Literal(condition.location, condition.sign, new_atom)
-                                            new_condition.append(new_literal)
+                                        if not condition.atom.ast_type == clingo.ast.ASTType.Comparison and condition.atom.symbol.name in self.original_programs_list[0].head_predicates:
+                                            terms = [self.create_substitution(node.location, condition.atom.symbol.name, condition.atom.symbol.arguments, not condition.sign),
+                                                    None if not self.aggregate_reduct else self.create_substitution(node.location, condition.atom.symbol.name, condition.atom.symbol.arguments, condition.sign)
+                                            ]
+                                            for term in terms:
+                                                if not term is None:
+                                                    new_atom = clingo.ast.SymbolicAtom(term)
+                                                    new_literal = clingo.ast.Literal(condition.location, condition.sign, new_atom)
+                                                    new_condition.append(new_literal)
                                         else:
                                             new_condition.append(condition)
                                     else:
@@ -185,8 +160,7 @@ class ReductRewriter(clingo.ast.Transformer):
                         if not self.parsing_first_program:
                             #if predicate is defined in some program rewrite it on the + signature, otherwise leave it unchanged
                             if elem.atom.symbol.name in self.to_rewrite_predicates:
-                                self.suffix_p_literals[self.ANNOTATION_OPEN_P + elem.atom.symbol.name + self.ANNOTATION_CLOSE_P] = elem.atom.symbol.name #self.suffix_p
-                                new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_P + elem.atom.symbol.name + self.ANNOTATION_CLOSE_P, elem.atom.symbol.arguments, False)                                
+                                new_term = self.create_substitution(node.location, elem.atom.symbol.name, elem.atom.symbol.arguments, True)
                                 new_atom = clingo.ast.SymbolicAtom(new_term)
                                 new_literal = clingo.ast.Literal(node.location, elem.sign, new_atom)
                                 rewritten_body.append(new_literal)
@@ -195,17 +169,16 @@ class ReductRewriter(clingo.ast.Transformer):
                         else:
                             #parsing first program
                             #if predicate is defined in the program for which I am writing the reduct, map it to the + and - signatures
+                            #if not doing aggregate reduct it is mapped only to one signature - the one corresponding to its sign
                             if elem.atom.symbol.name in self.original_programs_list[0].head_predicates:
-                                if elem.sign:
-                                    self.suffix_n_literals[self.ANNOTATION_OPEN_N + elem.atom.symbol.name + self.ANNOTATION_CLOSE_N] = elem.atom.symbol.name #self.suffix_n
-                                    new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_N + elem.atom.symbol.name + self.ANNOTATION_CLOSE_N, elem.atom.symbol.arguments, False)
-                                else:
-                                    self.suffix_p_literals[self.ANNOTATION_OPEN_P + elem.atom.symbol.name + self.ANNOTATION_CLOSE_P] = elem.atom.symbol.name #self.suffix_p
-                                    new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_P + elem.atom.symbol.name + self.ANNOTATION_CLOSE_P, elem.atom.symbol.arguments, False)
-
-                                new_atom = clingo.ast.SymbolicAtom(new_term)
-                                new_literal = clingo.ast.Literal(node.location, elem.sign, new_atom)
-                                rewritten_body.append(new_literal)
+                                terms = [self.create_substitution(node.location, elem.atom.symbol.name, elem.atom.symbol.arguments, not elem.sign),
+                                                    None if not self.aggregate_reduct else self.create_substitution(node.location, elem.atom.symbol.name, elem.atom.symbol.arguments, elem.sign)
+                                ]
+                                for term in terms:
+                                    if not term is None:
+                                        new_atom = clingo.ast.SymbolicAtom(term)
+                                        new_literal = clingo.ast.Literal(node.location, elem.sign, new_atom)
+                                        rewritten_body.append(new_literal)
                             else:#if predicate is not defined in the program for which I am writing the reduct, leave it as it is
                                 rewritten_body.append(elem)
                     else:
@@ -222,40 +195,69 @@ class ReductRewriter(clingo.ast.Transformer):
             fail_lit = clingo.ast.Literal(node.location, clingo.ast.Sign.Negation, clingo.ast.SymbolicAtom(fail_func))
             rewritten_body.append(fail_lit)
 
-        if node.head.atom.ast_type != clingo.ast.ASTType.BooleanConstant:
-            self.suffix_p_literals[self.ANNOTATION_OPEN_P + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_P] = node.head.atom.symbol.name #self.suffix_p 
-            new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_P + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_P, node.head.atom.symbol.arguments, False)
-            new_head = clingo.ast.SymbolicAtom(new_term)
-            #add rules of the form fail :-l+, not l-. and fail :-l-, not l+.  
-            if self.parsing_first_program:
-                try:
-                    #add fail :- a_p not a_n for every rule in P2
-                    f_1 = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_P + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_P, node.head.atom.symbol.arguments, False)
-
-                    self.suffix_n_literals[self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N] = node.head.atom.symbol.name #self.suffix_n
-                    f_2 = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_N + node.head.atom.symbol.name + self.ANNOTATION_CLOSE_N, node.head.atom.symbol.arguments, False)
-                    l_1 = clingo.ast.Literal(node.location, False, f_1)
-                    l_2 = clingo.ast.Literal(node.location, True, f_2)
-                    self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
-                    fail_head = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
-                    fail_body = [l_1, l_2]
-                    self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
-                    
-                    nl_1 = clingo.ast.Literal(node.location, True, f_1)
-                    nl_2 = clingo.ast.Literal(node.location, False, f_2)
-                    fail_body = [nl_1, nl_2]
-                    self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
-                except:
-                    print("Usupported head")
-                    exit(1)
-        else: 
+        if node.head.ast_type == clingo.ast.ASTType.Literal and node.head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
             self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
             new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
             new_head = clingo.ast.SymbolicAtom(new_term)
+            self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
+        else:
+            new_heads = []
+            new_bodies = []
+            if node.head.ast_type == clingo.ast.ASTType.Aggregate:
+                for elem in node.head.elements:
+                    new_body = rewritten_body.copy()
+                    new_heads.append(elem.literal.atom.symbol)
 
-        self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
-    
+                    #add head on negative signature in the body in such a way that the rule is simplified if the head is not true on the negative signature (to simulate the reduct of choice rules)
+                    new_term = self.create_substitution(node.location, elem.literal.atom.symbol.name, elem.literal.atom.symbol.arguments, False)
+                    new_head_neg = clingo.ast.SymbolicAtom(new_term)
+                    new_body.append(new_head_neg)
 
+                    for cond in elem.condition:                  
+                        if not cond.atom.ast_type == clingo.ast.ASTType.Comparison:
+                            symb_atom = cond.atom.symbol
+                            if symb_atom.name in self.original_programs_list[0].head_predicates:
+                                self.create_substitution_and_add(node.location, symb_atom.name, symb_atom.arguments, cond.sign , new_body)
+                        else:
+                            new_body.append(cond)
+
+                    new_bodies.append(new_body)               
+            else:
+                new_term = self.create_substitution(node.location, node.head.atom.symbol.name, node.head.atom.symbol.arguments, True)
+                new_head = clingo.ast.SymbolicAtom(new_term)
+                new_heads.append(node.head.atom.symbol)
+                new_bodies.append(rewritten_body)
+            
+            for idx in range(len(new_heads)):
+                new_head = new_heads[idx]
+                new_body = new_bodies[idx]
+        
+                try:
+                    #add rules of the form fail :-l+, not l-. and fail :-l-, not l+.  
+                    if self.parsing_first_program:
+                        #add fail :- a_p not a_n for every rule in P2
+                        f_1 = self.create_substitution(node.location, new_head.name, new_head.arguments, True)
+
+                        self.suffix_n_literals[self.ANNOTATION_OPEN_N + new_head.name + self.ANNOTATION_CLOSE_N] = new_head.name #self.suffix_n
+                        f_2 = self.create_substitution(node.location, new_head.name, new_head.arguments, False)
+                        l_1 = clingo.ast.Literal(node.location, False, f_1)
+                        l_2 = clingo.ast.Literal(node.location, True, f_2)
+
+                        self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
+                        fail_head = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
+                        fail_body = [l_1, l_2]
+                        self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
+                        
+                        nl_1 = clingo.ast.Literal(node.location, True, f_1)
+                        nl_2 = clingo.ast.Literal(node.location, False, f_2)
+                        fail_body = [nl_1, nl_2]
+                        self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, fail_head, fail_body)))
+                except:
+                    print("Usupported head")
+                    exit(1)
+                new_head_f = self.create_substitution(node.location, new_head.name, new_head.arguments, True)
+                new_head_l = clingo.ast.Literal(node.location, False, new_head_f)
+                self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head_l, new_body)))
 
     def compute_placeholder_program(self):
         #do not parse also constraint program - it will be treated separately
@@ -268,15 +270,31 @@ class ReductRewriter(clingo.ast.Transformer):
             parse_string(program.rules, lambda stm: (self(stm)))
             self.placeholder_program = "\n".join(self.placeholder_program_rules)
             self.placeholder_program_rules = []
-            if not self.ground_transformation:
-                self.placeholder_programs_list_rules.append(self.placeholder_program)
-            else:
-                self.placeholder_programs_list_rules.append(self.placeholder_program.split("\n"))
+
+            self.placeholder_programs_list_rules.append(self.placeholder_program)
             self.placeholder_program = ""
 
         self.pattern_suffix_p = re.compile('|'.join(re.escape(k) for k in self.suffix_p_literals))
         self.pattern_suffix_n = re.compile('|'.join(re.escape(k) for k in self.suffix_n_literals))
-        self.pattern_fail = re.compile('|'.join(re.escape(k) for k in self.fail_literals))
-        #one rule per list elem
-        if self.ground_transformation:
-            self.pattern_suffix_n_negated = re.compile('not ' + '|not '.join(re.escape(k) for k in self.suffix_n_literals)) 
+        self.pattern_fail = re.compile('|'.join(re.escape(k) for k in self.fail_literals)) 
+
+
+    def create_substitution(self, location, predicate_name, arguments, positive_signature):
+        if positive_signature:
+            self.suffix_p_literals[self.ANNOTATION_OPEN_P + predicate_name + self.ANNOTATION_CLOSE_P] = predicate_name
+            return clingo.ast.Function(location, self.ANNOTATION_OPEN_P + predicate_name + self.ANNOTATION_CLOSE_P, arguments, False) 
+        else:
+            self.suffix_n_literals[self.ANNOTATION_OPEN_N + predicate_name + self.ANNOTATION_CLOSE_N] = predicate_name
+            return clingo.ast.Function(location, self.ANNOTATION_OPEN_N + predicate_name + self.ANNOTATION_CLOSE_N, arguments, False)
+   
+    #remap predicarte to 
+    def create_substitution_and_add(self, location, pred_name, arguments, sign, structure):
+        term = self.create_substitution(location, pred_name, arguments, sign == clingo.ast.Sign.NoSign)
+        new_atom = clingo.ast.SymbolicAtom(term)
+        new_literal = clingo.ast.Literal(location, sign, new_atom)
+        structure.append(new_literal)
+        if self.aggregate_reduct:
+            term = self.create_substitution(location, pred_name, arguments, not sign == clingo.ast.Sign.NoSign)
+            new_atom = clingo.ast.SymbolicAtom(term)
+            new_literal = clingo.ast.Literal(location, sign, new_atom)
+            structure.append(new_literal)

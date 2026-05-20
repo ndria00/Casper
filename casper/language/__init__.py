@@ -11,12 +11,6 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-from .ASPQSolver import *
-from .OrProgramRewriter import *
-from .FlipConstraintRewriter import *
-from .QuantifiedProgram import *
-from .ProgramsHandler import *
-from .RelaxedRewriter import *
-from .Rewriter import *
-from .SplitProgramRewriter import *
-from .WeakRewriter import *
+from .QuantifiedProgram import QuantifiedProgram
+from .QuantifiedProgram import ProgramQuantifier
+from .WeakConstraint import WeakConstraint

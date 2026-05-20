@@ -11,21 +11,19 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-import clingo
-from clingo.ast import parse_string
 
-from .SolverSettings import SolverSettings
+
+from casper.language import ProgramQuantifier, QuantifiedProgram
+from casper.utils import SolverSettings
 from .OrUnsatWeakRewriter import OrUnsatWeakRewriter
 from .ReductRewriter import ReductRewriter
-from .CloneRewriter import CloneRewriter
-from .QuantifiedProgram import ProgramQuantifier
 from .OrProgramRewriter import OrProgramRewriter
 from .CheckRewriter import CheckRewriter
 from .RefinementRewriter import RefinementRewriter
-from .QuantifiedProgram import QuantifiedProgram
+
 
 class RefinementWeakRewriter(RefinementRewriter):
-    original_programs_list : list
+    original_programs_list : list[QuantifiedProgram]
     rewritten_program : str
     check_rewriter : CheckRewriter
     external_predicates : list
@@ -67,8 +65,8 @@ class RefinementWeakRewriter(RefinementRewriter):
             self.current_dominated_predicate = self.check_rewriter.dominated_predicate_name
             #compute or with clone and cost of clone just once - these two programs are the same across refinements
             if self.num_calls == 0:
-                or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set()), False)
-                or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set()), False)
+                or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set(), self.check_rewriter.program.contains_choice, False), False)
+                or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set(), self.check_rewriter.program.contains_choice, False), False)
                 or_clone_program_rewriter.rewrite("", None)
                 or_clone_cost_program_rewriter.rewrite("", None)
                 activated_clone_program = or_clone_program_rewriter.rewritten_program

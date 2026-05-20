@@ -22,21 +22,30 @@ class ProgramQuantifier(str, Enum):
 class QuantifiedProgram:
     MIN_WEAK_LEVEL : int = 0
     rules : str
+    rules_as_constraints : str
     weak_constraints : list
     program_type : ProgramQuantifier
     name : str
     head_predicates : set
     output_predicates : set
+    contains_choice : bool
+    contains_disjunction : bool
+    contains_aggregates : bool
 
-    def __init__(self, rules, weak_constraints, program_type, program_name, head_predicates) -> None:
+    def __init__(self, rules, weak_constraints, program_type, program_name, head_predicates, contains_choice, contains_disjucntion, contains_aggregates=False, rules_as_constraints=None, rules_as_constraints_clone=None) -> None:
         self.rules = rules
+        self.rules_as_constraints = rules_as_constraints
+        self.rules_as_constraints_clone = rules_as_constraints_clone
         self.weak_constraints = weak_constraints
         self.weak = len(self.weak_constraints) > 0
         self.program_type = program_type
         self.name = program_name
         self.head_predicates = set(head_predicates)
         self.output_predicates = set()
-    
+        self.contains_choice = contains_choice
+        self.contains_disjunction = contains_disjucntion
+        self.contains_aggregates = contains_aggregates
+        
     def exists(self):
         return self.program_type == ProgramQuantifier.EXISTS
     
@@ -61,6 +70,21 @@ class QuantifiedProgram:
 
     def contains_weak(self):
         return len(self.weak_constraints) > 0
+
+    def as_constraint(self):
+        quantifier = ""
+        if self.program_type == ProgramQuantifier.EXISTS:
+            quantifier = "%@exists"
+        elif self.program_type == ProgramQuantifier.FORALL:
+            quantifier = "%@forall"
+        elif self.program_type == ProgramQuantifier.CONSTRAINTS:
+            quantifier = "%@constraint"
+        elif self.program_type == ProgramQuantifier.GLOBAL_WEAK:
+            quantifier = "%@global"
+        else:
+            raise Exception("Unexpected quantifier")
+        weak_repr = "\n".join(str(weak) for weak in self.weak_constraints)
+        return f"{quantifier}\n{self.rules_as_constraints}\n{weak_repr}"
 
     def __str__(self):
         quantifier = ""

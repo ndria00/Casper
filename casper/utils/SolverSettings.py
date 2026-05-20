@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import logging
-from .QuantifiedProgram import QuantifiedProgram
+from casper.language import QuantifiedProgram
 
 class SolverSettings:
 
@@ -35,6 +35,11 @@ class SolverSettings:
     RELAXED_CPREDICATE : str = "violated_constraint"
     UNSAT_C_PREDICATE : str = "unsat_c"
     FOUND_LEVEL : str = "found_level"
+    
+    DISJUNCTION_FRESH_ATOMS_PREFIX : str = "n_"
+    DISJUNCTION_DIFF_ATOM_NAME : str = "diff_m"
+    DISJUNCTION_SUBSET_PRED_NAME : str = "m2_subset"
+    DISJUNCTION_CLONE_ATOM_SUFFIX : str = "_c"
 
     WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS: int = 1
 

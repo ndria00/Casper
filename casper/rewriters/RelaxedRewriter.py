@@ -14,7 +14,7 @@
 import clingo
 import clingo.ast
 
-from .SolverSettings import SolverSettings
+from casper.utils import SolverSettings
 from .Rewriter import Rewriter
 
 

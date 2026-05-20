@@ -11,9 +11,9 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+from casper.language import QuantifiedProgram
+from casper.utils import SolverSettings
 from .CostRewriter import CostRewriter
-from .SolverSettings import SolverSettings
-from .QuantifiedProgram import QuantifiedProgram
 
 class RefinementGlobalWeakRewriter:
 

@@ -11,14 +11,14 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-from .QuantifiedProgram import QuantifiedProgram, ProgramQuantifier
+from casper.language import QuantifiedProgram, ProgramQuantifier
 
 #Takes P_2, ..., P_n : C as programs
 #flips quantifiers and constraint if the first program is \exists (i.e. the outermost program was a \forall)
 class CounterexampleRewriter:
     constraint_program : QuantifiedProgram
     negated_constraint_program : QuantifiedProgram
-    original_programs_list : list
+    original_programs_list : list[QuantifiedProgram]
     rewritten_programs_list : list
     flip_quantifier_and_constraint: bool
     first_rewrite : bool
@@ -55,7 +55,7 @@ class CounterexampleRewriter:
                 else:
                     quantifier = self.original_programs_list[i].program_type
                 prg = self.original_programs_list[i]
-                self.rewritten_programs_list.append(QuantifiedProgram(prg.rules, [], quantifier, prg.name, prg.head_predicates))        
+                self.rewritten_programs_list.append(QuantifiedProgram(prg.rules, [], quantifier, prg.name, prg.head_predicates, prg.contains_choice, prg.contains_disjunction))        
             if self.flip_quantifier_and_constraint:
                 self.rewritten_programs_list.append(self.negated_constraint_program)
             else:

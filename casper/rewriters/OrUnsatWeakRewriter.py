@@ -13,10 +13,10 @@
 #    limitations under the License.
 import clingo
 from clingo.ast import parse_string
-from .QuantifiedProgram import QuantifiedProgram
+from casper.language import QuantifiedProgram
 import re
 
-class OrProgramRewriter(clingo.ast.Transformer):
+class OrUnsatWeakRewriter(clingo.ast.Transformer):
     ANNOTATION_OPEN_P : str = "<<"
     ANNOTATION_CLOSE_P : str = ">>"
     ANNOTATION_OPEN_F : str = ">>"
@@ -30,7 +30,7 @@ class OrProgramRewriter(clingo.ast.Transformer):
     suffix_p_literals : dict
     unsat_literals : dict
 
-    def __init__(self, to_rewrite_predicates, unsat_atom_name, rewrite_program_predicates, program, negated = True):
+    def __init__(self, to_rewrite_predicates, unsat_atom_name, weak_atom_name, weak_atom_level, rewrite_program_predicates, program, negated = True):
         if rewrite_program_predicates:
             self.rewrite_predicates = program.head_predicates | to_rewrite_predicates
         else:
@@ -43,6 +43,8 @@ class OrProgramRewriter(clingo.ast.Transformer):
         self.suffix_p_literals = dict()
         self.unsat_literals = dict()
         self.unsat_atom_name = unsat_atom_name
+        self.weak_atom_name = weak_atom_name
+        self.weak_atom_level = weak_atom_level
 
     def rewrite(self, suffix_p, iteration):
         if self.placeholder_program == "":
@@ -60,6 +62,8 @@ class OrProgramRewriter(clingo.ast.Transformer):
                 self.rewritten_program = self.pattern_fail.sub(lambda a : self.unsat_literals[a.group(0)] + str(iteration), self.rewritten_program)
             else:
                 self.rewritten_program = self.pattern_fail.sub(lambda a : self.unsat_literals[a.group(0)], self.rewritten_program)
+        weak_atom_choice = "{" + self.weak_atom_name + suffix_p + str(iteration) + "}."
+        self.rewritten_program = f"{self.rewritten_program}\n"
 
     def visit_Rule(self, node):
         rewritten_body = []
@@ -72,7 +76,11 @@ class OrProgramRewriter(clingo.ast.Transformer):
                     new_head = clingo.ast.SymbolicAtom(new_term)
             else:
                 raise Exception("Not supported head")
-
+        else:
+            self.suffix_p_literals[self.ANNOTATION_OPEN_P + self.weak_atom_name + self.ANNOTATION_CLOSE_P]  = self.weak_atom_name #self.suffix_p
+            new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_P + self.weak_atom_name + self.ANNOTATION_CLOSE_P, [], False)
+            new_head = clingo.ast.SymbolicAtom(new_term)
+        
         for elem in node.body:
             if elem.ast_type == clingo.ast.ASTType.Literal:
                 if not elem.atom is None:

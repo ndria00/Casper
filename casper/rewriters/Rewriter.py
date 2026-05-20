@@ -51,8 +51,13 @@ class Rewriter(clingo.ast.Transformer):
        
     def extract_predicate_from_choice(self, node):
         for elem in node.elements:
+            self.head_predicates.add(elem.literal.atom.symbol.name)            
+            # print(f"Added {elem.literal.atom.symbol.name} to head predicates")
+
+    def extract_predicate_from_disjunction(self, node):
+        for elem in node.elements:
             self.head_predicates.add(elem.literal.atom.symbol.name)
-            #print(f"Added {elem.literal.atom.symbol.name} to head predicates")
+            # print(f"Added {elem.literal.atom.symbol.name} to head predicates")
 
     def visit_Minimize(self, node):
         pass

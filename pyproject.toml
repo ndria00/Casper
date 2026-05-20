@@ -1,7 +1,8 @@
 [project]
 name = "casper"
 version = "0.0.1"
-description = "Add your description here"
+authors = [{ name = "Andrea Cuteri", email = "andrea.cuteri@unical.it" }]
+description = "A solver for 2-ASP(Q)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,8 +10,8 @@ dependencies = [
 ]
 
 [project.scripts]
-casper = "src.app:entrypoint"
+casper = "casper.app:entrypoint"
 
-[tool.setuptools]
-packages = ["src"]
+[tool.setuptools.packages.find]
+where = ["."]
 

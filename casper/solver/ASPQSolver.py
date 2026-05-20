@@ -15,27 +15,25 @@ from pathlib import Path
 import clingo
 from clingo.ast import parse_string
 
-from .ASPChefModelPrinter import ASPChefModelPrinter
-from .ClingoLogger import ClingoLogger
-from .CostRewriter import CostRewriter
-from .RefinementGlobalWeakRewriter import RefinementGlobalWeakRewriter
-from .WeakObserver import WeakObserver
-from .OrProgramRewriter import OrProgramRewriter
-from .RefinementWeakRewriter import RefinementWeakRewriter
-from .RelaxedRewriter import RelaxedRewriter
-from .SolverStatistics import SolverStatistics
-
-from .CounterexampleRewriter import CounterexampleRewriter
-from .RefinementRewriter import RefinementRewriter
-from .RefinementNoWeakRewriter import RefinementNoWeakRewriter
-from .SolverSettings import SolverSettings
-from .QuantifiedProgram import ProgramQuantifier
-from .ConstraintModelPrinter import ConstraintModelPrinter
-from .ModelPrinter import ModelPrinter
-from .MyLogger import MyLogger
-from .PositiveModelPrinter import PositiveModelPrinter
+from casper.output import ASPChefModelPrinter
+from casper.loggers import ClingoLogger
+from casper.rewriters import CostRewriter
+from casper.rewriters import RefinementGlobalWeakRewriter
+from casper.rewriters import WeakObserver
+from casper.rewriters import RefinementWeakRewriter
+from casper.rewriters import RelaxedRewriter
+from casper.rewriters import CounterexampleRewriter
+from casper.rewriters import RefinementRewriter
+from casper.rewriters import RefinementNoWeakRewriter
+from casper.utils import SolverStatistics
+from casper.utils import SolverSettings
+from casper.output import ConstraintModelPrinter
+from casper.output import ModelPrinter
+from casper.loggers import MyLogger
+from casper.output import PositiveModelPrinter
 from .ProgramsHandler import ProgramsHandler
-from .QuantifiedProgram import QuantifiedProgram
+
+import time
 
 class ASPQSolver:
     programs_handler : ProgramsHandler
@@ -142,7 +140,11 @@ class ASPQSolver:
         self.ctl_countermove_has_weak = False
         self.unsat_c_predicate_found = False
         self.clingo_logger = ClingoLogger()
-
+        # print("********************************************************************")
+        # for program in self.programs_handler.programs_list:
+        #     print(program)
+        #     print("Head preds", program.head_predicates)
+        # print("********************************************************************")
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control(logger=self.clingo_logger.log) 
@@ -383,9 +385,7 @@ class ASPQSolver:
                         self.last_quantified_model_cost = self.current_candidate_cost
                         self.last_quantified_model = self.current_candidate
                         self.current_candidate_cost = []
-                        #empty model is unique if it exists - no other models can be
-                        if len(self.current_candidate) == 0:
-                            return True
+                        
                     if self.models_found == self.settings.n_models:
                         return True
                     self.add_model_as_constraint()
@@ -507,8 +507,10 @@ class ASPQSolver:
                         self.violated_constraint_atoms.append(clingo.Function(self.refinement_rewriter.current_unsat_c_predicate, []))
                     
                     self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refine_program)
+
                     self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
                     self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+
                     SolverStatistics().iteration_done()
         else:
             self.settings.logger.debug("%sInside recursive cegar for n-ASPQ with n >=3", self.output_pad)

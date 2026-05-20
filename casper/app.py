@@ -11,19 +11,21 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-from clingo.ast import parse_string
-from .SolverStatistics import SolverStatistics
-from .SplitProgramRewriter import SplitProgramRewriter
-from .ProgramsHandler import ProgramsHandler
-from .SolverSettings import SolverSettings
-from .ASPQSolver import ASPQSolver
-from .WeakRewriter import WeakRewriter
-import argparse
-
-import signal
 import sys
+import signal
+import argparse
+from clingo.ast import parse_string
+from casper.utils import SolverStatistics
+from casper.utils import SolverSettings
+from casper.rewriters import SplitProgramRewriter
+from casper.rewriters import WeakRewriter
+from casper.solver import ProgramsHandler
+from casper.solver import ASPQSolver
+from casper.rewriters.disjunction import DisjunctionRewriter
+
 
 def _handle_signal(signum, frame):
+    SolverStatistics().print_statistics()
     print("Sig term")
     sys.stdout.flush()
     sys.exit(124)
@@ -41,6 +43,7 @@ def entrypoint():
     parser.add_argument('--statistics', help="print solving statistics\n", required=False, action="store_true")
     parser.add_argument('--json', help="print quantified answer sets in json format - done for integration with ASPChef\n", required=False, action="store_true")
     parser.add_argument('--constraint', help="enable constraint print of models\n", required=False, action="store_true")
+    parser.add_argument('--disjunction', help="enable disjunction in the solver\n", required=False, action="store_true")
     parser.add_argument('-n', help="number of q-answer sets to compute (if zero enumerate)\n", default=1)
     args = parser.parse_args()
     encoding_path = args.problem
@@ -62,15 +65,36 @@ def entrypoint():
             print("Could not open instance file")
             exit(1)
 
-    split_program_rewriter = SplitProgramRewriter(encoding_program)
-    problem_has_global_weak = False
-    collapse_global_weak_in_p1 = args.global_weak_lower_bound
-    if not split_program_rewriter.global_weak is None and collapse_global_weak_in_p1:
-        problem_has_global_weak = True
-    collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
-    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.propositional_program, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json))
 
-    weak_rewriter = WeakRewriter(split_program_rewriter, solver_settings.no_weak, collapse_global_weak_in_p1)
+    collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
+    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), False, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json))
+    split_program_rewriter = SplitProgramRewriter(encoding_program, bool(args.disjunction))
+    
+    # for program in split_program_rewriter.programs:
+    #     if program.contains_choice:
+    #         print("Cannot handle programs with choice rules")
+    #         exit(1)
+
+    programs = split_program_rewriter.programs
+    global_weak = split_program_rewriter.global_weak
+
+    if split_program_rewriter.program_contains_disjunction():
+        if split_program_rewriter.program_contains_weak():
+            print("Cannot handle weak costraints for disjunctive programs")
+            exit(1)
+        else:
+            disjunction_rewriter = DisjunctionRewriter(programs)
+            programs = disjunction_rewriter.rewrite()
+            for program in programs:
+                print(program)
+                print(program.head_predicates)
+            
+    problem_has_global_weak = False
+
+    if not global_weak is None and collapse_global_weak_in_p1:
+        problem_has_global_weak = True
+
+    weak_rewriter = WeakRewriter(programs, global_weak, solver_settings.no_weak, collapse_global_weak_in_p1)
     #check if rewritten program contains weak (for example, in \exists_weak \exist programs weak are never rewritten) 
     solver_settings.no_weak = solver_settings.no_weak or weak_rewriter.rewritten_program_contains_weak
     
