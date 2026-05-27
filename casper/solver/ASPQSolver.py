@@ -17,7 +17,7 @@ from clingo.ast import parse_string
 
 from casper.output import ASPChefModelPrinter
 from casper.loggers import ClingoLogger
-from casper.rewriters import CostRewriter
+from casper.rewriters import CostRewriter, RefinementBlockingClauseRewriter
 from casper.rewriters import RefinementGlobalWeakRewriter
 from casper.rewriters import WeakObserver
 from casper.rewriters import RefinementWeakRewriter
@@ -91,7 +91,7 @@ class ASPQSolver:
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
         #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
-        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak, self.settings.json_format)
+        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak, self.settings.json_format, self.settings.blocking_ref)
         self.program_levels = len(self.programs_handler.programs_list) -1
         self.assumptions = []
         self.counterexample_rewriter = None
@@ -488,13 +488,19 @@ class ASPQSolver:
                     SolverStatistics().counterexample_found()
                     if self.refinement_rewriter is None:
                         if not self.programs_handler.program_contains_weak():
-                            self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                            if not self.settings.blocking_ref:
+                                self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                            else:
+                                self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
                             self.refinement_rewriter.compute_placeholder_program()
                         else:
                             self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                             self.refinement_rewriter.compute_placeholder_program()
 
-                    self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
+                    if not self.settings.blocking_ref:
+                        self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
+                    else:
+                        self.refinement_rewriter.rewrite(self.current_candidate_symbols_set, SolverStatistics().solvers_iterations)
                     refine_program = self.refinement_rewriter.refined_program()
                     
                     #Add a new external predicate and store new refinement predicates (fail_M, dominated_M, violated_condition_M)
@@ -566,9 +572,15 @@ class ASPQSolver:
                 #a counterexample was found
                 SolverStatistics().iteration_done()
                 if self.refinement_rewriter is None:
-                    self.refinement_rewriter = RefinementNoWeakRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                    if not self.settings.blocking_ref:
+                        self.refinement_rewriter = RefinementNoWeakRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                    else:
+                        self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
                     self.refinement_rewriter.compute_placeholder_program()
-                self.refinement_rewriter.rewrite(self.counterexample_solver.current_candidate, SolverStatistics().solvers_iterations)
+                if not self.settings.blocking_ref:
+                    self.refinement_rewriter.rewrite(self.counterexample_solver.current_candidate, SolverStatistics().solvers_iterations)
+                else:
+                    self.refinement_rewriter.rewrite(self.current_candidate_symbols_set, SolverStatistics().solvers_iterations)
                 #program with potentially first quantifiers collapsed and the or applied to remaining quantifiers (and also C)
                 refinement = self.refinement_rewriter.refined_program()
 

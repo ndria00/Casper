@@ -28,3 +28,4 @@ from .RelaxedRewriter import RelaxedRewriter
 from .Rewriter import Rewriter
 from .SplitProgramRewriter import SplitProgramRewriter
 from .WeakRewriter import WeakRewriter
+from .RefinementBlockingClauseRewriter import RefinementBlockingClauseRewriter

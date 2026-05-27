@@ -112,7 +112,7 @@ class ReductRewriter(clingo.ast.Transformer):
             #symbol predicate in P_2
             if symbol.name in self.original_programs_list[0].head_predicates:
                 new_symbol = clingo.Function(symbol.name + suffix_n_iteration, symbol.arguments, symbol.positive)
-                self.counterexample_facts = self.counterexample_facts + str(new_symbol) + "."
+                self.counterexample_facts = self.counterexample_facts + str(new_symbol) + ". "
 
         #add fail atom as an head predicate (it might be needed by rewritings of subsequent ASPQ programs)
         self.rewritten_programs_list[0].head_predicates.add(self.current_fail_predicate)

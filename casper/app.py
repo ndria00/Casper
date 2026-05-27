@@ -45,6 +45,7 @@ def entrypoint():
     parser.add_argument('--constraint', help="enable constraint print of models\n", required=False, action="store_true")
     parser.add_argument('--disjunction', help="enable disjunction in the solver\n", required=False, action="store_true")
     parser.add_argument('-n', help="number of q-answer sets to compute (if zero enumerate)\n", default=1)
+    parser.add_argument('--blocking-ref', help="Applies a weaker refinement transformation based on blocking clauses only\n", required=False, action="store_true")
     args = parser.parse_args()
     encoding_path = args.problem
     instance_path = args.instance
@@ -67,7 +68,7 @@ def entrypoint():
 
 
     collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
-    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), False, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json))
+    solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), False, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json), bool(args.blocking_ref))
     split_program_rewriter = SplitProgramRewriter(encoding_program, bool(args.disjunction))
     
     # for program in split_program_rewriter.programs:

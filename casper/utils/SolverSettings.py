@@ -57,8 +57,9 @@ class SolverSettings:
     no_weak : bool
     collapse_global_weak : bool
     json_format : bool
+    blocking_ref : bool 
 
-    def __init__(self, n_models, debug, constraint_print, ground_transformation, no_weak, collapse_global_weak=False, json_format=False):
+    def __init__(self, n_models, debug, constraint_print, ground_transformation, no_weak, collapse_global_weak=False, json_format=False, blocking_ref=False):
         self.ground_transformation = ground_transformation
         self.n_models = n_models
         self.debug = debug
@@ -68,7 +69,8 @@ class SolverSettings:
         self.setup_logging(self.debug)
         self.collapse_global_weak = collapse_global_weak
         self.json_format = json_format
-
+        self.blocking_ref = blocking_ref
+        
     def setup_logging(self, debug: bool):
         logging.basicConfig()
         self.logger = logging.getLogger("Casper")

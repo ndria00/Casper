@@ -1,0 +1,5 @@
+myenv/
+tests/
+__pycache__/
+casper.egg-info/
+build/
