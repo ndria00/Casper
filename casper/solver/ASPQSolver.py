@@ -497,10 +497,11 @@ class ASPQSolver:
                             self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
                             self.refinement_rewriter.compute_placeholder_program()
 
-                    if not self.settings.blocking_ref:
-                        self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
-                    else:
+                    
+                    if self.settings.blocking_ref and not self.programs_handler.program_contains_weak():
                         self.refinement_rewriter.rewrite(self.current_candidate_symbols_set, SolverStatistics().solvers_iterations)
+                    else:
+                        self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
                     refine_program = self.refinement_rewriter.refined_program()
                     
                     #Add a new external predicate and store new refinement predicates (fail_M, dominated_M, violated_condition_M)
