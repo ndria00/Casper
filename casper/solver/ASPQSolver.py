@@ -87,7 +87,6 @@ class ASPQSolver:
         self.programs_handler = programs_handler
         self.depth = depth
         self.output_pad = self.depth * '\t'
-        self.choice_str = ""
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
         #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
@@ -96,7 +95,7 @@ class ASPQSolver:
         self.assumptions = []
         self.counterexample_rewriter = None
         self.refinement_rewriter = None
-        self.models_found = 0
+        
         if self.settings.constraint_print:
             self.model_printer = ConstraintModelPrinter()
         elif self.settings.json_format:
@@ -114,6 +113,13 @@ class ASPQSolver:
             self.counterexample_solver = None
             self.refinement_solver =  None
 
+        self.p1_predicates_are_output = len(self.programs_handler.p(0).output_predicates) == 0
+        self.clingo_logger = ClingoLogger()
+        self.reset_solver()
+
+    def reset_solver(self):
+        self.choice_str = ""
+        self.models_found = 0
         self.current_candidate = None
         self.current_counterexample = None
         self.current_candidate_cost = []
@@ -125,7 +131,6 @@ class ASPQSolver:
         self.output_symbols_defined_in_first_program = dict()
         self.last_quantified_model_cost = None
         self.last_quantified_model = None
-        self.p1_predicates_are_output = len(self.programs_handler.p(0).output_predicates) == 0
         self.counterexample_found = 0
         self.optimum_found = False
         self.fail_atoms = []
@@ -139,12 +144,7 @@ class ASPQSolver:
         self.violated_global_bound_found = False
         self.ctl_countermove_has_weak = False
         self.unsat_c_predicate_found = False
-        self.clingo_logger = ClingoLogger()
-        # print("********************************************************************")
-        # for program in self.programs_handler.programs_list:
-        #     print(program)
-        #     print("Head preds", program.head_predicates)
-        # print("********************************************************************")
+
     def ground_and_construct_choice_interfaces(self):
         choice = []
         self.ctl_move = clingo.Control(logger=self.clingo_logger.log) 
@@ -310,7 +310,7 @@ class ASPQSolver:
             return not model.optimality_proven 
         return False
 
-    def finished_search_for_candiate(self, result):
+    def finished_search_for_candidate(self, result):
         if not result.unsatisfiable:
             self.current_candidate_symbols_set.clear()
             for symbol in self.current_candidate:
@@ -335,8 +335,18 @@ class ASPQSolver:
         constraint = constraint[:-1]
         constraint += "."
         self.settings.logger.debug("%sAdding model as constraint to ctl move:\n%s", self.output_pad, constraint)
-        self.ctl_move.add(f"constraint_{self.models_found}", [], constraint)
-        self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
+        #first program is expanded with constraint
+        self.programs_handler.programs_list[0].rules += f"\n{constraint}"
+        #if refinement solver was not created (i.e., no CE found so far), add the constraint directly over the ctl_move
+        if self.program_levels < 4 or self.refinement_solver is None:
+            self.programs_handler.programs_list[0]
+            self.ctl_move.add(f"constraint_{self.models_found}", [], constraint)
+            self.ctl_move.ground([(f"constraint_{self.models_found}", [])])
+        else: #if more than 4 levels and not refinement is None, create a new ASP(Q) solver in which the first program is extended with the constraint
+            new_programs_list = [p for p in self.programs_handler.programs_list]
+            new_programs_list[0].rules += f"\n{constraint}\n"
+            ref_programs_handler = ProgramsHandler(new_programs_list, self.programs_handler.instance, None)
+            self.refinement_solver = ASPQSolver(ref_programs_handler, self.sub_solvers_settings, False, self.depth+1)
 
     def print_projected_model(self, model):
         if self.settings.collapse_global_weak:
@@ -414,7 +424,7 @@ class ASPQSolver:
     def recursive_cegar(self):
         if self.program_levels == 1:
             # Program is \exists P_1:C or \forall P_1:C (with C possibly empty)
-            result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
+            result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
             if result.unsatisfiable:
                 #exists looses if P_1 \cup C unsat
                 #forall wins if P_1 \cup \neg C unsat
@@ -431,19 +441,20 @@ class ASPQSolver:
         #\exists P_1 \forall P_2 : C or
         #\forall P_1 \exists P_2 : C
         elif self.program_levels == 2:
+            self.settings.logger.debug("%sInside cegar for 2-ASPQ", self.output_pad)
             while True:
                 #add model M_1 of P_1 as assumption
                 self.assumptions = []
-                self.settings.logger.debug("%sSearching for candiate", self.output_pad)
+                self.settings.logger.debug("%sSearching for candidate", self.output_pad)
                 # Assign external atoms introduced by refinement of programs with weak constraints 
                 if self.programs_handler.p(1).contains_weak() and self.counterexample_found > 0:
                     external_preds = self.refinement_rewriter.external_predicates
                     for i in range(len(external_preds) -1):
                         self.ctl_move.assign_external(clingo.Function(external_preds[i]), False)
                     self.ctl_move.assign_external(clingo.Function(external_preds[-1]), True)
-                result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
+                result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
                 if result.unsatisfiable:
-                    self.settings.logger.debug("%sNo candiate found", self.output_pad)
+                    self.settings.logger.debug("%sNo candidate found", self.output_pad)
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
                     return True if self.programs_handler.forall_first() else False
@@ -465,7 +476,7 @@ class ASPQSolver:
                         if self.violated_constraint_found:
                             return True if self.programs_handler.forall_first() else False        
                         
-                    self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
+                    self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
                     self.construct_assumptions()
                     #search for counterexample
                     self.settings.logger.debug("%sSearching for counterexample", self.output_pad)
@@ -502,21 +513,20 @@ class ASPQSolver:
                         self.refinement_rewriter.rewrite(self.current_candidate_symbols_set, SolverStatistics().solvers_iterations)
                     else:
                         self.refinement_rewriter.rewrite(self.current_counterexample, SolverStatistics().solvers_iterations)
-                    refine_program = self.refinement_rewriter.refined_program()
+                    refinement = self.refinement_rewriter.refined_program()
                     
                     #Add a new external predicate and store new refinement predicates (fail_M, dominated_M, violated_condition_M)
                     if self.programs_handler.p(1).contains_weak():
                         self.ctl_move_has_weak = True
-                        refine_program += f"#external {self.refinement_rewriter.external_predicates[-1]}.\n"
+                        refinement += f"#external {self.refinement_rewriter.external_predicates[-1]}.\n"
                         self.fail_atoms.append(clingo.Function(self.refinement_rewriter.current_fail_predicate, []))
                         self.dominated_atoms.append(clingo.Function(self.refinement_rewriter.current_dominated_predicate, []))
                     if self.programs_handler.p(0).contains_weak():
                         self.violated_constraint_atoms.append(clingo.Function(self.refinement_rewriter.current_unsat_c_predicate, []))
                     
-                    self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refine_program)
+                    self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refinement)
 
-                    self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refine_program)
-                    self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+                    self.extend_control_and_ground_refinement(refinement)
 
                     SolverStatistics().iteration_done()
         else:
@@ -524,50 +534,61 @@ class ASPQSolver:
             while True:
                 self.assumptions = []
                 if self.refinement_solver is None:
+                    self.settings.logger.debug("%sSearching for candidate n>=3", self.output_pad)
                     #on the first iteration is just a solve on the outermost program
-                    result = self.ctl_move.solve(assumptions = self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
+                    result = self.ctl_move.solve(assumptions = self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
                     if result.unsatisfiable:
+                        self.settings.logger.debug("%sNo candidate found when solving ctl_move", self.output_pad)
                         #no move, current quantifier looses
                         return False if self.exists_first else True
                     else: 
-                        self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
+                        self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
                         self.construct_assumptions()
                 else:
                     if self.program_levels > 3:
+                        self.settings.logger.debug("%sSearching for candidate - solving ASP(Q) refinement", self.output_pad)
+                        self.refinement_solver.reset_solver()
                         satisfiable = self.refinement_solver.solve_n_levels(self.external_assumptions, self.choice_str)
                         SolverStatistics().iteration_done()
                                                 
                         if not satisfiable:
+                            self.settings.logger.debug("%sNo candidate found when solving refined ASP(Q)", self.output_pad)
                             return False if self.exists_first else True
                         else:
-                            self.refinement_rewriter.construct_assumptions()
-                            self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
+                            self.settings.logger.debug("%sFound candidate by solving refined ASP(Q)%s", self.output_pad, self.refinement_solver.current_candidate)
+                            #consider the candidate of the refinement solver as the candidate of this solver (similar to when the model found by solving the ctl_move is set as current candiate)
+                            self.current_candidate = self.refinement_solver.current_candidate
+                            self.current_candidate_symbols_set = self.refinement_solver.current_candidate_symbols_set
+                            self.current_candidate_cost = self.refinement_solver.current_candidate_cost
                     else:
-                        result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candiate)
+                        result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
                         if result.unsatisfiable:
                             return False if self.exists_first else True
                         else:
-                            self.settings.logger.debug("%sFound candiate %s", self.output_pad, self.current_candidate)
+                            self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
 
 
                 if self.counterexample_rewriter is None:
-                    self.counterexample_rewriter = CounterexampleRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c())
-                
-                self.counterexample_rewriter.rewrite(self.current_candidate_symbols_set, self.symbols_defined_in_first_program, self.programs_handler.p(0).head_predicates)
+                    self.counterexample_rewriter = CounterexampleRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c())            
+                    self.counterexample_rewriter.rewrite()
+
                 #this is always an ASPQ program with two or more levels
                 ce_programs_handler = ProgramsHandler(self.counterexample_rewriter.rewritten_program(), self.programs_handler.instance)
                 self.counterexample_solver = ASPQSolver(ce_programs_handler, self.sub_solvers_settings, False, self.depth +1)
 
                 self.construct_assumptions()
+                self.counterexample_solver.reset_solver()
                 satisfiable = self.counterexample_solver.solve_n_levels(self.external_assumptions + self.assumptions, self.choice_str)
-                
                 if satisfiable:
+                    self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.counterexample_solver.current_candidate)
                     SolverStatistics().counterexample_found()
                 #no counterexample
                 if not satisfiable and self.programs_handler.forall_first():
+                    self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                     return False
                     
                 if not satisfiable and self.programs_handler.exists_first():
+                    self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                     return True
                 
                 #a counterexample was found
@@ -587,21 +608,40 @@ class ASPQSolver:
 
                 #refinement is an ASP program and can be directly added to the ctl_move
                 if type(refinement) == str:
-                    self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refinement)
-                    self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+                    self.settings.logger.debug("%sResult of refinement:\n%s", self.output_pad, refinement)
+                    self.extend_control_and_ground_refinement(refinement)
                 else: #refinement is an ASPQ
+                    self.settings.logger.debug("%sResult of refinement is an ASP(Q) - not printed\n", self.output_pad)
                     if self.refinement_solver == None:
                         refinement_handler =  ProgramsHandler(refinement, self.programs_handler.instance)
-                        #add rules from P_1 into refinement which containts only programs from P_2
-                        refinement[0].rules += self.programs_handler.p(0).rules
+                        # add rules from P_1 into refinement
+                        # this should be done only the first time
+                        refinement[0].rules += f"\n{self.programs_handler.p(0).rules}\n"
+                        refinement[0].head_predicates = refinement[0].head_predicates | self.programs_handler.p(0).head_predicates
                         self.refinement_solver = ASPQSolver(refinement_handler, self.sub_solvers_settings, False, self.depth +1)
-                    else:
-                        assert len(refinement_handler.programs_list) == len(self.refinement_solver.programs_handler.programs_list)
-                        #update programs handler of of refinement_solver by extending programs with result of refinement
-                        for i in range(len(refinement_handler.programs_list)):
-                            self.refinement_solver.programs_handler.programs_list[i].rules += refinement_handler.programs_list[i].rules
+                    else: #when refinement solver is created, the refinement_handler aldready adds refinement... subsequent calls should expand single programs
+                        self.extend_control_and_ground_refinement(refinement)
+                    
+                    
+                    assert len(refinement_handler.programs_list) == len(self.refinement_solver.programs_handler.programs_list)
+                    
                 SolverStatistics().iteration_done()
                 
+    def extend_control_and_ground_refinement(self, refinement):
+        #add first program to ctl_move, call extend on sub-solvers
+        if type(refinement) == str:
+            self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refinement)
+            self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
+        else:            
+            new_programs_list = []
+            for i in range(len(refinement)):
+                new_programs_list.append(self.refinement_solver.programs_handler.programs_list[i])
+                #update each subprogram with rules of or(P_i, \naf as_{m_j})
+                new_programs_list[-1].rules += refinement[i].rules
+                new_programs_list[-1].head_predicates = self.refinement_solver.programs_handler.programs_list[i].head_predicates | refinement[i].head_predicates
+            ref_programs_handler = ProgramsHandler(new_programs_list, self.programs_handler.instance, None)
+            self.refinement_solver = ASPQSolver(ref_programs_handler, self.sub_solvers_settings, False, self.depth+1)
+
     def construct_assumptions(self):
         self.assumptions = []
         for symbol in self.symbols_defined_in_first_program.keys():

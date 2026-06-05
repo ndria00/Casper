@@ -43,19 +43,19 @@ class RefinementNoWeakRewriter(RefinementRewriter):
         self.reduct_rewriter.rewrite(counterexample, iteration)
     
         self.constraint_program_rewriter.rewrite(self.SUFFIX_P, iteration)
-        self.rewritten_programs_list = [*self.reduct_rewriter.rewritten_programs_list, QuantifiedProgram(self.constraint_program_rewriter.rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", self.to_rewrite_constraint.head_predicates, False, False)]
+        self.rewritten_programs_list = [*self.reduct_rewriter.rewritten_programs_list, QuantifiedProgram(self.constraint_program_rewriter.rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", self.constraint_program_rewriter.rewritten_predicates, False, False)]
         
         
     #called from outside only when the refinement becomes an ASP program
     def refined_program(self):
         #collapse the first three programs into an exists program and rename the remaining ones
-        if len(self.original_programs_list) > 3:
+        if len(self.original_programs_list) > 2:
             refinement_aspq = []
             refinement_str = ""
             head_predicates = set()
 
             for i in range(2):
-                refinement_str += self.rewritten_programs_list[i].rules
+                refinement_str += f"\n{self.rewritten_programs_list[i].rules}\n"
                 head_predicates = head_predicates | self.rewritten_programs_list[i].head_predicates
 
             refinement_aspq.append(QuantifiedProgram(refinement_str, [], ProgramQuantifier.EXISTS, "1", head_predicates, False, False))

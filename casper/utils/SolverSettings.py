@@ -40,6 +40,7 @@ class SolverSettings:
     DISJUNCTION_DIFF_ATOM_NAME : str = "diff_m"
     DISJUNCTION_SUBSET_PRED_NAME : str = "m2_subset"
     DISJUNCTION_CLONE_ATOM_SUFFIX : str = "_c"
+    DUMMY_VARIABLE_NAME_IN_FAIL_RULES_PREFIX :str = "X_"
 
     WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS: int = 1
 

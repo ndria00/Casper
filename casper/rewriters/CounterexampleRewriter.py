@@ -30,7 +30,7 @@ class CounterexampleRewriter:
         self.negated_constraint_program = program_neg_c
         self.rewritten_programs_list = []
         
-        #flip constraint if the first program to rewrite is a forall (e.g, the first program of the ASPQ is quantified existentially) 
+        #flip constraint if the first program to rewrite is a forall (i.e., the first program of the ASPQ is quantified existentially) 
         self.flip_quantifier_and_constraint = True if self.original_programs_list[0].program_type == ProgramQuantifier.FORALL else False 
         if self.flip_quantifier_and_constraint:
             self.original_programs_list.append(program_neg_c)
@@ -42,10 +42,9 @@ class CounterexampleRewriter:
         return self.rewritten_programs_list
 
 
-    def rewrite(self, model, p1_symbols, p1_predicates):
+    def rewrite(self):
         #on the first call construct counterexample program
         #on subsequent calls the counterexample program can be reused
-        #but the assumptions have to be updated
         if self.first_rewrite:
             self.rewritten_programs_list = []
             for i in range(len(self.original_programs_list)-1):
@@ -62,10 +61,3 @@ class CounterexampleRewriter:
                 self.rewritten_programs_list.append(self.constraint_program)
             self.first_program_rewritten = self.rewritten_programs_list[0].rules
         
-        assumptions = []
-        for symbol in p1_symbols:
-            if symbol in model and symbol.name in p1_predicates:
-                assumptions.append(f"{symbol}.")
-            # else:
-            #     assumptions.append(f"not {symbol}.")
-        self.rewritten_programs_list[0].rules = self.first_program_rewritten + " ".join(assumptions)

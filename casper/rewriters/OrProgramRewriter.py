@@ -23,6 +23,7 @@ class OrProgramRewriter(clingo.ast.Transformer):
     ANNOTATION_CLOSE_F : str = "<<"
     program : QuantifiedProgram
     rewritten_program : str
+    rewritten_predicates : set
     placeholder_program : str
     placeholder_program_rules : list
     rewrite_predicates : set
@@ -60,6 +61,10 @@ class OrProgramRewriter(clingo.ast.Transformer):
                 self.rewritten_program = self.pattern_fail.sub(lambda a : self.unsat_literals[a.group(0)] + str(iteration), self.rewritten_program)
             else:
                 self.rewritten_program = self.pattern_fail.sub(lambda a : self.unsat_literals[a.group(0)], self.rewritten_program)
+
+        self.rewritten_predicates = set()
+        for pred in self.program.head_predicates:
+            self.rewritten_predicates.add(f"{pred}{suffix_p}{iteration}")
 
     def visit_Rule(self, node):
         rewritten_body = []
