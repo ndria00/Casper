@@ -54,14 +54,14 @@ class SolverSettings:
     constraint_print : bool
     enumeration : bool
     logger : logging.Logger
-    ground_transformation : bool
+    pure_choice : bool
     no_weak : bool
     collapse_global_weak : bool
     json_format : bool
     blocking_ref : bool 
 
-    def __init__(self, n_models, debug, constraint_print, ground_transformation, no_weak, collapse_global_weak=False, json_format=False, blocking_ref=False):
-        self.ground_transformation = ground_transformation
+    def __init__(self, n_models, debug, constraint_print, pure_choice, no_weak, collapse_global_weak=False, json_format=False, blocking_ref=False):
+        self.pure_choice = pure_choice
         self.n_models = n_models
         self.debug = debug
         self.constraint_print = constraint_print

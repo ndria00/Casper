@@ -31,9 +31,9 @@ class RefinementNoWeakRewriter(RefinementRewriter):
     constraint_program_rewriter : OrProgramRewriter
     to_rewrite_constraint : QuantifiedProgram
 
-    def __init__(self, original_programs, program_c, program_neg_c, ground_transformation):
+    def __init__(self, original_programs, program_c, program_neg_c, pure_choice):
         self.original_programs_list = original_programs
-        self.reduct_rewriter = ReductRewriter(self.original_programs_list, self.SUFFIX_P, self.SUFFIX_N, self.FAIL_ATOM_NAME, ground_transformation)
+        self.reduct_rewriter = ReductRewriter(self.original_programs_list, self.SUFFIX_P, self.SUFFIX_N, self.FAIL_ATOM_NAME, pure_choice)
         #Here given a program of the form \exists P_1 \forall P_2, ... \exists P_n : C I am getting \forall P_2, ... \exists P_n : C 
         self.to_rewrite_constraint = program_c if self.original_programs_list[0].program_type == ProgramQuantifier.FORALL else program_neg_c
         self.rewritten_programs_list = []

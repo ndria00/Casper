@@ -36,6 +36,7 @@ class SplitProgramRewriter(Rewriter):
     program_is_open : bool
     encoding_program : str
     handle_disjunction : bool
+    pure_choice : bool
 
     def __init__(self, encoding_program, handle_disjunction) -> None:
         super().__init__()
@@ -55,6 +56,7 @@ class SplitProgramRewriter(Rewriter):
         self.curr_program_contains_aggregates = False
         self.curr_program_contains_choice = False
         self.handle_disjunction = handle_disjunction
+        self.pure_choice = True
         parse_string(encoding_program, lambda stm: (self(stm)))
         self.closed_program()
         
@@ -174,13 +176,18 @@ class SplitProgramRewriter(Rewriter):
         head = node.head
         rule_is_choice = False
         if head.ast_type == clingo.ast.ASTType.Literal:
+            if not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS:
+                self.pure_choice = False
             if not head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
                 self.extract_predicate_from_literal(head)
         elif head.ast_type == clingo.ast.ASTType.Aggregate:
+            assert not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS
             self.extract_predicate_from_choice(head)
             self.curr_program_contains_choice = True
             rule_is_choice = True
         elif head.ast_type == clingo.ast.ASTType.Disjunction:
+            assert not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS
+            self.pure_choice = False
             if not self.handle_disjunction:
                 raise Exception("Programs with disjunction must be handled using --disjunction. Only simple ASP programs with disjunction are allowed (not ASP(Q) programs)")
             self.extract_predicate_from_disjunction(head)
@@ -235,6 +242,7 @@ class SplitProgramRewriter(Rewriter):
         left_guard = choice.head.left_guard
         right_guard = choice.head.right_guard
         if not left_guard is None:
+            self.pure_choice = False
             self.curr_program_contains_aggregates = True
             remapped_op = self.remap_choice_rule_guards_for_constraint(left_guard.comparison, True)
             constraint_guard_1 = clingo.ast.Guard(remapped_op, left_guard.term)
@@ -244,6 +252,7 @@ class SplitProgramRewriter(Rewriter):
             constraint_1 = clingo.ast.Rule(choice.location, clingo.ast.BooleanConstant(False), constraint_body)
             self.cur_program_rules.append(str(constraint_1))
         if not right_guard is None:
+            self.pure_choice = False
             self.curr_program_contains_aggregates = True
             remapped_op = self.remap_choice_rule_guards_for_constraint(right_guard.comparison, False)
             constraint_guard_2 = clingo.ast.Guard(remapped_op, right_guard.term)    

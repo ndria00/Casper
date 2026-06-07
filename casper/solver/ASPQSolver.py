@@ -90,7 +90,7 @@ class ASPQSolver:
         self.settings = solver_settings
         #sub solvers are always required to compute one model, inherit the same debug flag as the parent,
         #never print the model as a constraint since no enumeration is needed, apply ground transformations iff the current solver does
-        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.ground_transformation, self.settings.no_weak, self.settings.collapse_global_weak, self.settings.json_format, self.settings.blocking_ref)
+        self.sub_solvers_settings = SolverSettings(1, self.settings.debug, False, self.settings.pure_choice, self.settings.no_weak, self.settings.collapse_global_weak, self.settings.json_format, self.settings.blocking_ref)
         self.program_levels = len(self.programs_handler.programs_list) -1
         self.assumptions = []
         self.counterexample_rewriter = None
@@ -197,7 +197,7 @@ class ASPQSolver:
             return
         else:
             if self.programs_handler.p(1).contains_weak():
-                self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                 self.refinement_rewriter.compute_placeholder_program()
             
             if not self.programs_handler.global_weak_program is None and not self.settings.collapse_global_weak:
@@ -398,6 +398,9 @@ class ASPQSolver:
                         
                     if self.models_found == self.settings.n_models:
                         return True
+                    #this is to handle the case in which no symbol is defined in a given program and all false is a quantified answer set
+                    if len(self.output_symbols_defined_in_first_program.keys()) == 0:
+                        return True
                     self.add_model_as_constraint()
                 else:
                     if self.main_solver:
@@ -500,12 +503,12 @@ class ASPQSolver:
                     if self.refinement_rewriter is None:
                         if not self.programs_handler.program_contains_weak():
                             if not self.settings.blocking_ref:
-                                self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                                self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                             else:
                                 self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
                             self.refinement_rewriter.compute_placeholder_program()
                         else:
-                            self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                            self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                             self.refinement_rewriter.compute_placeholder_program()
 
                     
@@ -595,7 +598,7 @@ class ASPQSolver:
                 SolverStatistics().iteration_done()
                 if self.refinement_rewriter is None:
                     if not self.settings.blocking_ref:
-                        self.refinement_rewriter = RefinementNoWeakRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.ground_transformation)
+                        self.refinement_rewriter = RefinementNoWeakRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                     else:
                         self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
                     self.refinement_rewriter.compute_placeholder_program()

@@ -23,7 +23,7 @@ class RefinementRewriter(ABC):
     rewritten_programs_list : list
 
     @abstractmethod
-    def __init__(self, original_programs, program_c, program_neg_c, ground_transformation):
+    def __init__(self, original_programs, program_c, program_neg_c, purre_choice):
         pass
 
     def rewrite(self, counterexample, iteration):

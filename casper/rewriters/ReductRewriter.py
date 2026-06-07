@@ -37,7 +37,7 @@ class ReductRewriter(clingo.ast.Transformer):
     suffix_p_literals : dict
     suffix_n_literals : dict
     fail_literals : dict
-    ground_transformation : bool
+    pure_choice : bool
     placeholder_program : str
     placeholder_program_rules : list
     parsing_first_program: bool
@@ -45,13 +45,13 @@ class ReductRewriter(clingo.ast.Transformer):
     current_fail_predicate : str
     aggregate_reduct: bool
 
-    def __init__(self, original_programs, suffix_p, suffix_n, fail_atom_name, ground_transformation):
+    def __init__(self, original_programs, suffix_p, suffix_n, fail_atom_name, pure_choice):
         self.original_programs_list = original_programs
         self.placeholder_programs_list_rules = []
         self.placeholder_program_rules = []
         self.rewritten_programs_list_rules = ["" for _ in range(len(self.original_programs_list))]
         self.rewritten_programs_list = []
-        self.ground_transformation = ground_transformation
+        self.pure_choice = pure_choice
         self.suffix_p = suffix_p
         self.suffix_n = suffix_n
         self.fail_atom_name = fail_atom_name
@@ -108,10 +108,11 @@ class ReductRewriter(clingo.ast.Transformer):
             rewritten_preds.add(f"{pred}{suffix_p_iteration}") 
            
         self.counterexample_facts = " "
+        counterexample_facts_signature = suffix_n_iteration if not self.pure_choice else suffix_p_iteration
         for symbol in counterexample:
             #symbol predicate in P_2
             if symbol.name in self.original_programs_list[0].head_predicates:
-                new_symbol = clingo.Function(symbol.name + suffix_n_iteration, symbol.arguments, symbol.positive)
+                new_symbol = clingo.Function(symbol.name + counterexample_facts_signature, symbol.arguments, symbol.positive)
                 self.counterexample_facts = self.counterexample_facts + str(new_symbol) + ". "
 
         #add fail atom as an head predicate (it might be needed by rewritings of subsequent ASPQ programs)
@@ -222,7 +223,7 @@ class ReductRewriter(clingo.ast.Transformer):
                 rewritten_body.append(elem)
                 
         #disable all programs after the program for which I compute the reduct
-        if not self.parsing_first_program:
+        if not self.parsing_first_program and not self.pure_choice:
             self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name #fail
             fail_func = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
             fail_lit = clingo.ast.Literal(node.location, clingo.ast.Sign.Negation, clingo.ast.SymbolicAtom(fail_func))
@@ -231,9 +232,10 @@ class ReductRewriter(clingo.ast.Transformer):
         if node.head.ast_type == clingo.ast.ASTType.Literal and node.head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
             self.fail_literals[self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F] = self.fail_atom_name
             if self.parsing_first_program:
-                new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
-                new_head = clingo.ast.SymbolicAtom(new_term)
-                self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
+                if not self.pure_choice:
+                    new_term = clingo.ast.Function(node.location, self.ANNOTATION_OPEN_F + self.fail_atom_name + self.ANNOTATION_CLOSE_F, [], False)
+                    new_head = clingo.ast.SymbolicAtom(new_term)
+                    self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, new_head, rewritten_body)))
             else:
                 self.placeholder_program_rules.append(str(clingo.ast.Rule(node.location, node.head, rewritten_body)))        
         else:
@@ -293,7 +295,8 @@ class ReductRewriter(clingo.ast.Transformer):
             #and rewrite all the predicates from the first program over the + signature
             self.parsing_first_program = True if i == 0 else False
             self.placeholder_program_rules = []
-            clingo.ast.parse_string(program.rules, lambda stm: (self(stm)))
+            if not self.pure_choice or not self.parsing_first_program: 
+                clingo.ast.parse_string(program.rules, lambda stm: (self(stm)))
             self.placeholder_program = "\n".join(self.placeholder_program_rules)
             self.placeholder_program_rules = []
 

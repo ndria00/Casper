@@ -30,15 +30,15 @@ class RefinementWeakRewriter(RefinementRewriter):
     refinements_fail_predicates : list 
     num_calls : int
 
-    def __init__(self, original_programs_list, program_c, program_neg_c, ground_transformation):
+    def __init__(self, original_programs_list, program_c, program_neg_c, pure_choice):
         assert(len(original_programs_list) == 1)
         self.original_programs_list = original_programs_list
-        self.ground_transformation = ground_transformation
+        self.pure_choice = pure_choice
         self.rewritten_program = ""
         self.num_calls = 0
         self.external_predicates = []
         self.refinements_fail_predicates = []
-        self.reduct_rewriter = ReductRewriter([self.original_programs_list[0]], self.SUFFIX_P, self.SUFFIX_N, self.FAIL_ATOM_NAME, ground_transformation)
+        self.reduct_rewriter = ReductRewriter([self.original_programs_list[0]], self.SUFFIX_P, self.SUFFIX_N, self.FAIL_ATOM_NAME, pure_choice)
         self.constraint_program_rewriter = OrUnsatWeakRewriter(self.reduct_rewriter.to_rewrite_predicates, self.FAIL_ATOM_NAME, SolverSettings.RELAXED_CPREDICATE, -3, True, program_neg_c if self.original_programs_list[-1].program_type == ProgramQuantifier.EXISTS else program_c)
         
         self.check_rewriter = CheckRewriter(self.original_programs_list[0], False, False)
