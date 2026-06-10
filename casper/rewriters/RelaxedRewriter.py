@@ -31,18 +31,16 @@ class RelaxedRewriter(Rewriter):
                 self.extract_predicate_from_literal(head)         
             except:
                 pass #head of constraints end up here
-        elif clingo.ast.ASTType.Aggregate:
+        elif head.ast_type == clingo.ast.ASTType.Aggregate:
             self.extract_predicate_from_choice(head)
 
         unsat_atom = clingo.ast.SymbolicAtom(clingo.ast.Function(node.location, self.unsat_pred_name, [], False))
 
         node.body.insert(0, clingo.ast.Literal(location = node.location, sign=clingo.ast.Sign.Negation, atom=unsat_atom))
         self.program.append(str(clingo.ast.Rule(node.location, node.head, node.body)))
-        return node.update(**self.visit_children(node))
 
     def visit_Program(self, node):
         choice = "{" + f"{self.unsat_pred_name}" + "}."
         weak = f":~{self.unsat_pred_name}. [{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{self.weak_level}]"
         self.program.append(weak)
         self.program.append(choice)
-        return node.update(**self.visit_children(node))

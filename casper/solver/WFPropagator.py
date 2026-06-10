@@ -10,7 +10,23 @@
 #    distributed under the License is distributed on an "AS IS" BASIS,
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
-#    limitations under the License.
-from .ASPQSolver import ASPQSolver
-from .ProgramsHandler import ProgramsHandler
-from .WFPropagator import WFPropagator
+#    limitations under the License. 
+
+import clingo
+
+
+class WFPropagator(clingo.Propagator):
+    def __init__(self):
+        self.true_atoms  = set()
+        self.false_atoms = set()
+
+    def init(self, init: clingo.PropagateInit):
+        assignment = init.assignment
+        for atom in init.symbolic_atoms:
+            solver_lit = init.solver_literal(atom.literal)
+            val = assignment.value(solver_lit)
+            sym = atom.symbol
+            if val is True:
+                self.true_atoms.add(sym)
+            elif val is False:
+                self.false_atoms.add(sym)

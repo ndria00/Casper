@@ -31,9 +31,9 @@ from casper.output import ConstraintModelPrinter
 from casper.output import ModelPrinter
 from casper.loggers import MyLogger
 from casper.output import PositiveModelPrinter
+from .WFPropagator import WFPropagator
 from .ProgramsHandler import ProgramsHandler
 
-import time
 
 class ASPQSolver:
     programs_handler : ProgramsHandler
@@ -82,7 +82,8 @@ class ASPQSolver:
     violated_global_bound_found : bool
     unsat_c_predicate_found : bool
     clingo_logger : ClingoLogger
-
+    solved_by_simplification : bool
+    
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
         self.depth = depth
@@ -144,10 +145,56 @@ class ASPQSolver:
         self.violated_global_bound_found = False
         self.ctl_countermove_has_weak = False
         self.unsat_c_predicate_found = False
+        self.solved_by_simplification = False
 
+    def ground_merged_programs_and_compute_simplifications(self):
+        #create a clingo control that stops the search at level zero
+        ctl_simp = clingo.Control(["--solve-limit=0"])
+        known_symbols = set()
+        program_to_symbols = dict()
+        for prg in self.programs_handler.programs_list:
+            # print(f"Adding to ctl simplifications {prg.rules}")
+            ctl_simp.add(prg.rules)
+            ctl_simp.ground()
+            program_to_symbols[prg.name] = set()
+            for atom in ctl_simp.symbolic_atoms:
+                if atom.symbol not in known_symbols:
+                    known_symbols.add(atom.symbol)
+                    program_to_symbols[prg.name].add(atom.symbol)
+        
+        prop = WFPropagator()
+        ctl_simp.ground()
+        ctl_simp.register_propagator(prop)
+        ctl_simp.solve()
+        # print("Certainly TRUE (WF-true):  ", sorted(prop.true_atoms))
+        # print("Certainly FALSE (WF-false):", sorted(prop.false_atoms))
+        facts_and_constraints_for_programs = []
+        for program_name in program_to_symbols.keys():
+            facts_and_constraints  = []
+            for symbol in program_to_symbols[program_name]:
+                if symbol in prop.true_atoms:
+                    facts_and_constraints.append(f"{symbol}.")
+                if symbol in prop.false_atoms:
+                    facts_and_constraints.append(f":- {symbol}.")
+                    
+            facts_and_constraints_for_programs.append("\n".join(facts_and_constraints))
+        return facts_and_constraints_for_programs
+    
     def ground_and_construct_choice_interfaces(self):
+        simplifications = ""
+        if self.main_solver and self.settings.pure_choice:
+            simplifications = self.ground_merged_programs_and_compute_simplifications()
+            for idx in range(len(simplifications) -1):
+                if simplifications[idx] != "" and self.programs_handler.programs_list[idx].forall():
+                    self.solved_by_simplification = True
+                    break
+                self.settings.logger.debug("Adding simplification to program with %s %s", idx, simplifications[idx])
+                self.programs_handler.programs_list[idx].rules += simplifications[idx]
+
         choice = []
         self.ctl_move = clingo.Control(logger=self.clingo_logger.log) 
+        if self.settings.pure_choice:
+            self.ctl_move.configuration.solver.sign_def = "rnd"     
         self.ctl_move.configuration.solve.opt_mode = "optN"
         self.ctl_move.configuration.solve.models = "0"
 
@@ -362,7 +409,10 @@ class ASPQSolver:
         self.external_assumptions = external_assumptions
 
         self.ground_and_construct_choice_interfaces()
-
+        #if simplification is found for a forall variable, the considered ASP(Q) program is UNSAT
+        #Note: simplifications are only computed by pure choice programs
+        if self.solved_by_simplification:
+            return False
         while self.models_found < self.settings.n_models or self.settings.enumeration:
             satisfiable = self.recursive_cegar()
             if satisfiable:

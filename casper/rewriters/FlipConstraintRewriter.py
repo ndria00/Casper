@@ -33,17 +33,13 @@ class FlipConstraintRewriter(Rewriter):
         if head.ast_type == clingo.ast.ASTType.Literal:
             if not head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
                 self.extract_predicate_from_literal(head)
+                self.program.append(str(node))
             else:
                 #head of constraints end up here
                 self.program.append(str(clingo.ast.Rule(node.location, self.unsat_atom, node.body)))
-                return node.update(**self.visit_children(node))
-        elif clingo.ast.ASTType.Aggregate:
-            self.extract_predicate_from_choice(head)
-
-        self.program.append(str(node))
-        return node.update(**self.visit_children(node))
+        else:
+            print("Unsupported head in constraint")
     
     def visit_Program(self, node):
         if self.add_constraint:
             self.program.append(f":-not {self.unsat_pred_name}.")
-        return node.update(**self.visit_children(node))

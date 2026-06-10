@@ -202,8 +202,6 @@ class SplitProgramRewriter(Rewriter):
 
         if self.handle_disjunction:
             self.visit_rule_disj(node)
-        
-        return node.update(**self.visit_children(node))
     
     def rewrite_choice_without_guards(self, choice):
         head = choice.head
@@ -388,4 +386,4 @@ class SplitProgramRewriter(Rewriter):
         body = ",".join([str(lit) for lit in node.body])
         weak = WeakConstraint(body, weight, level, terms)
         self.curr_weak_constraints.append(weak)
-        return node.update(**self.visit_children(node))
+        
