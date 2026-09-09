@@ -1,5 +1,5 @@
 # Casper
-Casper is a native solver based on Counter Example Abstraction Refinement (CEGAR) for 2-ASP(Q) programs (i.e., programs with at most two quantifiers), possibly with weak constraints.
+Casper is a solver based on Counterexample-Guided Abstraction Refinement (CEGAR) for 2-ASP(Q) programs (i.e., programs with at most two quantifiers).
 
 In order to install and run Casper please clone this repository and then follow the instructions.
 
@@ -33,8 +33,7 @@ options:
   
   --statistics                    print solving statistics
   
-  --json                          print quantified answer sets in json format - done for
-                                  integration with ASPChef
+  --json                          print quantified answer sets in json format
   
   --constraint                    enable constraint print of models (can be used for testing) - does not apply to universal programs
   
@@ -45,7 +44,7 @@ However, if an instance file is specified, its content is replicated in every su
 
 Reminders: 
 -  do not break the stratified definition assumption assumed by the ASP(Q) language,
--  do not use aggregates, disjunction, conditional literals or choice rules in the second program of your encoding since they are not supported yet
+-  do not use disjunction or conditional literals in the second program of your encoding since they are not supported yet
 
 All these restrictions will be removed as soon as possible.
 
