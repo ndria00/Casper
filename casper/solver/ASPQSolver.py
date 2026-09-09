@@ -302,6 +302,9 @@ class ASPQSolver:
                 self.ctl_countermove.configuration.solve.opt_mode = "optN"
                 self.ctl_countermove.configuration.solve.models = "0"
                 self.settings.logger.debug("%sadded choice to ctl countermove:\n%s", self.output_pad, self.choice_str)
+                if self.programs_handler.instance != "":
+                    self.settings.logger.debug("%sAdded instance to ctl countermove:\n%s", self.output_pad, self.programs_handler.instance)
+                    self.ctl_countermove.add(self.programs_handler.instance)
                 self.ctl_countermove.add(self.choice_str)
                 self.ctl_countermove.add(self.programs_handler.p(1).rules)
                 self.settings.logger.debug("%sadded second program to ctl countermove:\n%s", self.output_pad, self.programs_handler.p(1).rules)
