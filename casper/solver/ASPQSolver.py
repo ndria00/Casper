@@ -182,6 +182,7 @@ class ASPQSolver:
     
     def ground_and_construct_choice_interfaces(self):
         simplifications = ""
+        #simplifications can be done only if program is pure choice and are applied only on the top-level solver
         if self.main_solver and self.settings.pure_choice:
             simplifications = self.ground_merged_programs_and_compute_simplifications()
             for idx in range(len(simplifications) -1):
@@ -192,9 +193,7 @@ class ASPQSolver:
                 self.programs_handler.programs_list[idx].rules += simplifications[idx]
 
         choice = []
-        self.ctl_move = clingo.Control(logger=self.clingo_logger.log) 
-        if self.settings.pure_choice:
-            self.ctl_move.configuration.solver.sign_def = "rnd"     
+        self.ctl_move = clingo.Control(logger=self.clingo_logger.log)      
         self.ctl_move.configuration.solve.opt_mode = "optN"
         self.ctl_move.configuration.solve.models = "0"
 
@@ -472,10 +471,7 @@ class ASPQSolver:
                     return True
                 #program starts with exists and therefore there might be models already found
                 #the exit code should depend also on these
-                if self.models_found > 0:
-                    return True
-                else:
-                    return False
+                return self.models_found > 0
 
     def recursive_cegar(self):
         if self.program_levels == 1:
@@ -484,7 +480,7 @@ class ASPQSolver:
             if result.unsatisfiable:
                 #exists looses if P_1 \cup C unsat
                 #forall wins if P_1 \cup \neg C unsat
-                return False if self.programs_handler.last_exists() else True
+                return not self.programs_handler.last_exists()
             if self.programs_handler.p(0).contains_weak():
                 #for 1-ASPQW, global weak constraints are added inside P_1 and unsat_c is always added at level -1
                 if not self.unsat_c_predicate_found:
@@ -493,7 +489,7 @@ class ASPQSolver:
                     return False
             #exists wins if P_1 \cup C sat
             #forall looses if P_1 \cup \neg C sat            
-            return True if self.programs_handler.last_exists() else False
+            return self.programs_handler.last_exists()
         #\exists P_1 \forall P_2 : C or
         #\forall P_1 \exists P_2 : C
         elif self.program_levels == 2:
@@ -513,7 +509,7 @@ class ASPQSolver:
                     self.settings.logger.debug("%sNo candidate found", self.output_pad)
                     #forall wins if P_1 has no sm
                     #exist looses if P_1 has no sm
-                    return True if self.programs_handler.forall_first() else False
+                    return self.programs_handler.forall_first()
                 else:
                     self.settings.logger.debug("%sCandidate cost: %s", self.output_pad, self.current_candidate_cost)
                     #check if current candidate violates the bound constraint
@@ -527,10 +523,10 @@ class ASPQSolver:
                     if self.programs_handler.p(1).contains_weak():
                         #No new candidate if not fail, not dominated and violated constraint (i.e., there is at least one CE that is again a CE for any possible candidate)
                         if not self.fail_found and not self.dominated_found and self.violated_constraint_found:
-                            return True if self.programs_handler.forall_first() else False
+                            return self.programs_handler.forall_first()
                     elif self.programs_handler.p(0).contains_weak():
                         if self.violated_constraint_found:
-                            return True if self.programs_handler.forall_first() else False        
+                            return self.programs_handler.forall_first()        
                         
                     self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
                     self.construct_assumptions()
@@ -542,14 +538,14 @@ class ASPQSolver:
                         self.settings.logger.debug("%sNo counterexample found", self.output_pad)
                         #forall wins if P_2 \cup \neg C has no sm
                         #exists looses if P_2 \cup C has no sm
-                        return False if self.programs_handler.last_exists() else True
+                        return not self.programs_handler.last_exists()
                     #unsat_c \in model means that ctr(\Pi) is unsatisfiable, which means no counterexample exists
                     #:~unsat_c was added to detect this case when the countermove ctl was created
                     if self.programs_handler.p(1).contains_weak():
                         self.settings.logger.debug("%sCounterexample cost %s", self.output_pad, self.current_counterexample_cost)
                         if self.unsat_c_predicate_found:
                             self.settings.logger.debug("%sNo counterexample found", self.output_pad)
-                            return True if self.programs_handler.exists_first() else False
+                            return self.programs_handler.exists_first() 
                     self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.current_counterexample)
                     self.counterexample_found += 1
                     SolverStatistics().counterexample_found()
@@ -596,7 +592,7 @@ class ASPQSolver:
                     if result.unsatisfiable:
                         self.settings.logger.debug("%sNo candidate found when solving ctl_move", self.output_pad)
                         #no move, current quantifier looses
-                        return False if self.exists_first else True
+                        return not self.exists_first
                     else: 
                         self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
                         self.construct_assumptions()
@@ -609,7 +605,7 @@ class ASPQSolver:
                                                 
                         if not satisfiable:
                             self.settings.logger.debug("%sNo candidate found when solving refined ASP(Q)", self.output_pad)
-                            return False if self.exists_first else True
+                            return not self.exists_first
                         else:
                             self.settings.logger.debug("%sFound candidate by solving refined ASP(Q)%s", self.output_pad, self.refinement_solver.current_candidate)
                             #consider the candidate of the refinement solver as the candidate of this solver (similar to when the model found by solving the ctl_move is set as current candiate)
@@ -619,7 +615,7 @@ class ASPQSolver:
                     else:
                         result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
                         if result.unsatisfiable:
-                            return False if self.exists_first else True
+                            return not self.exists_first
                         else:
                             self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
 
