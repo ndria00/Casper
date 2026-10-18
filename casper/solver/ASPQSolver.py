@@ -597,7 +597,6 @@ class ASPQSolver:
                         self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
                         self.construct_assumptions()
                 else:
-                    if self.program_levels > 3:
                         self.settings.logger.debug("%sSearching for candidate - solving ASP(Q) refinement", self.output_pad)
                         self.refinement_solver.reset_solver()
                         satisfiable = self.refinement_solver.solve_n_levels(self.external_assumptions, self.choice_str)
@@ -612,12 +611,6 @@ class ASPQSolver:
                             self.current_candidate = self.refinement_solver.current_candidate
                             self.current_candidate_symbols_set = self.refinement_solver.current_candidate_symbols_set
                             self.current_candidate_cost = self.refinement_solver.current_candidate_cost
-                    else:
-                        result = self.ctl_move.solve(assumptions=self.external_assumptions, on_model=self.on_candidate, on_finish=self.finished_search_for_candidate)
-                        if result.unsatisfiable:
-                            return not self.exists_first
-                        else:
-                            self.settings.logger.debug("%sFound candidate %s", self.output_pad, self.current_candidate)
 
 
                 if self.counterexample_rewriter is None:
