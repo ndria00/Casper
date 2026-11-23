@@ -71,10 +71,6 @@ def entrypoint():
     split_program_rewriter = SplitProgramRewriter(encoding_program, bool(args.disjunction))
     solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.pure_choice, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json), bool(args.blocking_ref))
     
-    # for program in split_program_rewriter.programs:
-    #     if program.contains_choice:
-    #         print("Cannot handle programs with choice rules")
-    #         exit(1)
 
     programs = split_program_rewriter.programs
     global_weak = split_program_rewriter.global_weak
