@@ -185,6 +185,8 @@ class SplitProgramRewriter(Rewriter):
             self.extract_predicate_from_choice(head)
             self.curr_program_contains_choice = True
             rule_is_choice = True
+            if node.body != [] or head.left_guard is not None or head.right_guard is not None:
+                self.pure_choice = False
         elif head.ast_type == clingo.ast.ASTType.Disjunction:
             assert not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS
             self.pure_choice = False
