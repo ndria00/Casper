@@ -25,18 +25,21 @@ class RefinementBlockingClauseRewriter(RefinementRewriter):
     symbols_defined_in_abstraction : dict
     rewritten_program : str
     curr_candiate : list 
+    edb_predicates : set
 
-    def __init__(self, symbols_defined_in_abstraction):
+    def __init__(self, symbols_defined_in_abstraction, edb_predicates):
         self.symbols_defined_in_abstraction = symbols_defined_in_abstraction
+        self.edb_predicates = edb_predicates
 
     def rewrite(self, candidate, iteration):
         self.curr_candiate = candidate
         self.rewritten_program = ":-"
         for symbol in self.symbols_defined_in_abstraction.keys():
-            if symbol in candidate:
-                self.rewritten_program += f"{symbol},"
-            else:
-                self.rewritten_program += f"not {symbol},"
+           if not symbol.name in self.edb_predicates:
+                if symbol in candidate:
+                    self.rewritten_program += f"{symbol},"
+                else:
+                    self.rewritten_program += f"not {symbol},"
 
         self.rewritten_program = self.rewritten_program[:-1]
         self.rewritten_program += "."

@@ -75,7 +75,7 @@ class DisjunctionObserver(clingo.Observer):
         for pred in self.program.head_predicates:
             head_predicates.add(pred)
             head_predicates.add(f"{SolverSettings.DISJUNCTION_FRESH_ATOMS_PREFIX}{pred}")
-        self.p1 = QuantifiedProgram("\n".join(p1_rules) + "\n" + self.program.rules_as_constraints, [], ProgramQuantifier.EXISTS, "p_1", head_predicates, False, False)
+        self.p1 = QuantifiedProgram("\n".join(p1_rules) + "\n" + self.program.rules_as_constraints, [], ProgramQuantifier.EXISTS, "p_1", head_predicates, set(), False, False)
 
     def construct_p2(self):
         self.p2 = None
@@ -100,11 +100,11 @@ class DisjunctionObserver(clingo.Observer):
         for pred in self.program.head_predicates:
             head_predicates.add(f"{pred}{SolverSettings.DISJUNCTION_CLONE_ATOM_SUFFIX}")
             head_predicates.add(f"{SolverSettings.DISJUNCTION_FRESH_ATOMS_PREFIX}{pred}{SolverSettings.DISJUNCTION_CLONE_ATOM_SUFFIX}") 
-        self.p2 = QuantifiedProgram("\n".join(p2_rules) + "\n" + self.program.rules_as_constraints_clone + "\n" + "\n".join(p2_diff_rules), [], ProgramQuantifier.FORALL, "p_2", head_predicates, False, False)
+        self.p2 = QuantifiedProgram("\n".join(p2_rules) + "\n" + self.program.rules_as_constraints_clone + "\n" + "\n".join(p2_diff_rules), [], ProgramQuantifier.FORALL, "p_2", head_predicates, set(), False, False)
     
     def construct_c(self):
         self.c = None
-        self.c = QuantifiedProgram(f":- not {SolverSettings.DISJUNCTION_DIFF_ATOM_NAME}, {SolverSettings.DISJUNCTION_SUBSET_PRED_NAME}.\n", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)
+        self.c = QuantifiedProgram(f":- not {SolverSettings.DISJUNCTION_DIFF_ATOM_NAME}, {SolverSettings.DISJUNCTION_SUBSET_PRED_NAME}.\n", [], ProgramQuantifier.CONSTRAINTS, "c", set(), set(), False, False)
 
     def print_aspq_program(self):
         print(self.p1)

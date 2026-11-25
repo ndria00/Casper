@@ -26,9 +26,12 @@ class SolverStatistics:
     def __init__(self):
         pass
 
-    def counterexample_found(self):
+    def new_counterexample_found(self):
         self.conterexample_found+=1
-
+    
+    def num_counterexample(self):
+        return self.conterexample_found
+    
     def model_found(self):
         self.models_found += 1
 

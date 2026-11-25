@@ -34,7 +34,7 @@ class ProgramsHandler:
         flip_constraint_rewriter = FlipConstraintRewriter(f"{self.FLIP_CONSTRAINT_PREDICATE_NAME}{len(self.programs_list)}")
         constraint_program = self.programs_list[len(self.programs_list)-1]
         parse_string(constraint_program.rules, lambda stm: (flip_constraint_rewriter(stm)))
-        self.flipped_constraint = QuantifiedProgram("\n".join(flip_constraint_rewriter.program), [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, flip_constraint_rewriter.head_predicates, False, False) 
+        self.flipped_constraint = QuantifiedProgram("\n".join(flip_constraint_rewriter.program), [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, flip_constraint_rewriter.head_predicates, set(), False, False) 
 
     def p(self, idx):
         if idx < 0 or idx >= len(self.programs_list):

@@ -1,8 +1,8 @@
 [project]
 name = "casper"
-version = "0.0.3"
+version = "0.1.0"
 authors = [{ name = "Andrea Cuteri", email = "andrea.cuteri@unical.it" }]
-description = "A solver for 2-ASP(Q)"
+description = "A CEGAR-based solver for ASP(Q)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

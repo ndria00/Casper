@@ -59,6 +59,7 @@ class SolverSettings:
     collapse_global_weak : bool
     json_format : bool
     blocking_ref : bool 
+    max_num_ce : int
 
     def __init__(self, n_models, debug, constraint_print, pure_choice, no_weak, collapse_global_weak=False, json_format=False, blocking_ref=False):
         self.pure_choice = pure_choice
@@ -71,7 +72,14 @@ class SolverSettings:
         self.collapse_global_weak = collapse_global_weak
         self.json_format = json_format
         self.blocking_ref = blocking_ref
-        
+        self.max_num_ce = -1
+
+    def set_stop_after_max_ce(self, n):
+        self.max_num_ce = n
+
+    def stop_with_found_ce(self, n):
+        return self.max_num_ce !=-1 and n >= self.max_num_ce
+
     def setup_logging(self, debug: bool):
         logging.basicConfig()
         self.logger = logging.getLogger("Casper")

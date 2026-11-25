@@ -65,8 +65,8 @@ class RefinementWeakRewriter(RefinementRewriter):
             self.current_dominated_predicate = self.check_rewriter.dominated_predicate_name
             #compute or with clone and cost of clone just once - these two programs are the same across refinements
             if self.num_calls == 0:
-                or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set(), self.check_rewriter.program.contains_choice, False), False)
-                or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set(), self.check_rewriter.program.contains_choice, False), False)
+                or_clone_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_program, [], ProgramQuantifier.EXISTS, "", set(), set(), self.check_rewriter.program.contains_choice, False), False)
+                or_clone_cost_program_rewriter = OrProgramRewriter(set(), SolverSettings.ACTIVATE_CLONE_PREDICATE, False, QuantifiedProgram(self.check_rewriter.clone_cost_program, [], ProgramQuantifier.EXISTS, "", set(), set(), self.check_rewriter.program.contains_choice, False), False)
                 or_clone_program_rewriter.rewrite("", None)
                 or_clone_cost_program_rewriter.rewrite("", None)
                 activated_clone_program = or_clone_program_rewriter.rewritten_program

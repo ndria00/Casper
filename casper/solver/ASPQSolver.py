@@ -83,6 +83,7 @@ class ASPQSolver:
     unsat_c_predicate_found : bool
     clingo_logger : ClingoLogger
     solved_by_simplification : bool
+    abort_solve : bool
     
     def __init__(self, programs_handler, solver_settings, main_solver, depth):
         self.programs_handler = programs_handler
@@ -96,7 +97,7 @@ class ASPQSolver:
         self.assumptions = []
         self.counterexample_rewriter = None
         self.refinement_rewriter = None
-        
+
         if self.settings.constraint_print:
             self.model_printer = ConstraintModelPrinter()
         elif self.settings.json_format:
@@ -146,6 +147,7 @@ class ASPQSolver:
         self.ctl_countermove_has_weak = False
         self.unsat_c_predicate_found = False
         self.solved_by_simplification = False
+        self.abort_solve = False
 
     def ground_merged_programs_and_compute_simplifications(self):
         #create a clingo control that stops the search at level zero
@@ -417,6 +419,9 @@ class ASPQSolver:
             return False
         while self.models_found < self.settings.n_models or self.settings.enumeration:
             satisfiable = self.recursive_cegar()
+            if self.abort_solve:
+                return False
+
             if satisfiable:
                 if self.exists_first:
                     if not self.programs_handler.global_weak_program is None:
@@ -548,13 +553,17 @@ class ASPQSolver:
                             return self.programs_handler.exists_first() 
                     self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.current_counterexample)
                     self.counterexample_found += 1
-                    SolverStatistics().counterexample_found()
+                    if self.main_solver:
+                        SolverStatistics().new_counterexample_found()
+                        if self.settings.stop_with_found_ce(SolverStatistics().num_counterexample()):
+                            self.abort_solve = True
+                            return False
                     if self.refinement_rewriter is None:
                         if not self.programs_handler.program_contains_weak():
                             if not self.settings.blocking_ref:
                                 self.refinement_rewriter = RefinementNoWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                             else:
-                                self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
+                                self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program, self.programs_handler.p(0).edb_predicates)
                             self.refinement_rewriter.compute_placeholder_program()
                         else:
                             self.refinement_rewriter = RefinementWeakRewriter([self.programs_handler.p(1)], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
@@ -626,7 +635,11 @@ class ASPQSolver:
                 satisfiable = self.counterexample_solver.solve_n_levels(self.external_assumptions + self.assumptions, self.choice_str)
                 if satisfiable:
                     self.settings.logger.debug("%sCounterexample found %s", self.output_pad, self.counterexample_solver.current_candidate)
-                    SolverStatistics().counterexample_found()
+                    if self.main_solver:
+                        SolverStatistics().new_counterexample_found()
+                        if self.settings.stop_with_found_ce(SolverStatistics().num_counterexample()):
+                            self.abort_solve = True
+                            return False
                 #no counterexample
                 if not satisfiable and self.programs_handler.forall_first():
                     self.settings.logger.debug("%sNo counterexample found", self.output_pad)
@@ -642,7 +655,7 @@ class ASPQSolver:
                     if not self.settings.blocking_ref:
                         self.refinement_rewriter = RefinementNoWeakRewriter(self.programs_handler.programs_list[1:len(self.programs_handler.programs_list)-1], self.programs_handler.c(), self.programs_handler.neg_c(), self.settings.pure_choice)
                     else:
-                        self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program)
+                        self.refinement_rewriter = RefinementBlockingClauseRewriter(self.symbols_defined_in_first_program, self.programs_handler.p(0).edb_predicates)
                     self.refinement_rewriter.compute_placeholder_program()
                 if not self.settings.blocking_ref:
                     self.refinement_rewriter.rewrite(self.counterexample_solver.current_candidate, SolverStatistics().solvers_iterations)
@@ -677,7 +690,7 @@ class ASPQSolver:
         if type(refinement) == str:
             self.ctl_move.add(f"iteration_{SolverStatistics().solvers_iterations}", [], refinement)
             self.ctl_move.ground([(f"iteration_{SolverStatistics().solvers_iterations}", [])])
-        else:            
+        else:
             new_programs_list = []
             for i in range(len(refinement)):
                 new_programs_list.append(self.refinement_solver.programs_handler.programs_list[i])

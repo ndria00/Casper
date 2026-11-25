@@ -66,7 +66,7 @@ class SplitProgramRewriter(Rewriter):
             print("WARNING: global weak are ignored when first program is a forall program")
             self.global_weak = None
         if self.programs[len(self.programs)-1].program_type != ProgramQuantifier.CONSTRAINTS:
-            self.programs.append(QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False))
+            self.programs.append(QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), set(), False, False))
         else:
             if self.programs[len(self.programs)-1].contains_choice or self.programs[len(self.programs)-1].contains_disjunction:
                 raise Exception("Constraint program cannot contain disjunction of choice rules - it must be stratified")
@@ -174,11 +174,13 @@ class SplitProgramRewriter(Rewriter):
 
     def visit_Rule(self, node):
         head = node.head
+        body = node.body
         rule_is_choice = False
         if head.ast_type == clingo.ast.ASTType.Literal:
             if not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS:
                 self.pure_choice = False
             if not head.atom.ast_type == clingo.ast.ASTType.BooleanConstant:
+                self.extract_edb_predicate_from_literal(head, body)
                 self.extract_predicate_from_literal(head)
         elif head.ast_type == clingo.ast.ASTType.Aggregate:
             assert not self.cur_program_quantifier == ProgramQuantifier.CONSTRAINTS
@@ -204,6 +206,10 @@ class SplitProgramRewriter(Rewriter):
 
         if self.handle_disjunction:
             self.visit_rule_disj(node)
+
+    def extract_edb_predicate_from_literal(self, head, body):
+        if body == []:
+            self.edb_predicates.add(head.atom.symbol.name)
     
     def rewrite_choice_without_guards(self, choice):
         head = choice.head
@@ -328,7 +334,7 @@ class SplitProgramRewriter(Rewriter):
                 raise Exception("Only existential programs may admit disjunction")
             programs_as_constraints_str = "\n".join(self.curr_program_constraints)
             program_as_constraints_str_clone = "\n".join(self.curr_program_constraints_clone)
-            program = QuantifiedProgram(program_str, self.curr_weak_constraints, self.cur_program_quantifier, self.curr_program_name, self.head_predicates, self.curr_program_contains_choice, self.curr_program_contains_disjunction, self.curr_program_contains_aggregates, programs_as_constraints_str, program_as_constraints_str_clone)
+            program = QuantifiedProgram(program_str, self.curr_weak_constraints, self.cur_program_quantifier, self.curr_program_name, self.head_predicates, self.edb_predicates, self.curr_program_contains_choice, self.curr_program_contains_disjunction, self.curr_program_contains_aggregates, programs_as_constraints_str, program_as_constraints_str_clone)
             if self.cur_program_quantifier != ProgramQuantifier.GLOBAL_WEAK:
                 self.programs.append(program)
             else:
@@ -339,6 +345,7 @@ class SplitProgramRewriter(Rewriter):
         self.curr_program_constraints_clone = []
         self.curr_weak_constraints = []
         self.head_predicates = set()
+        self.edb_predicates = set()
         self.curr_program_contains_disjunction = False
         self.curr_program_contains_choice = False
         self.curr_program_contains_aggregates = False

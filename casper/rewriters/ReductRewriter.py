@@ -95,17 +95,20 @@ class ReductRewriter(clingo.ast.Transformer):
             else:
                 quantifier = ProgramQuantifier.EXISTS if self.original_programs_list[i].program_type == ProgramQuantifier.FORALL else ProgramQuantifier.FORALL
             
-            rewritten_preds = set()
+            rewritten_head_preds = set()
+            rewritten_edb_preds = set()
             for pred in self.original_programs_list[i].head_predicates:
-                rewritten_preds.add(f"{pred}{suffix_p_iteration}")
+                rewritten_head_preds.add(f"{pred}{suffix_p_iteration}")
+            for pred in self.original_programs_list[i].edb_predicates:
+                rewritten_edb_preds.add(f"{pred}{suffix_p_iteration}")
             #this could have weaks
-            self.rewritten_programs_list.append(QuantifiedProgram(self.rewritten_programs_list_rules[i], [], quantifier, prg_name, rewritten_preds, self.original_programs_list[i].contains_choice, self.original_programs_list[i].contains_disjunction))
+            self.rewritten_programs_list.append(QuantifiedProgram(self.rewritten_programs_list_rules[i], [], quantifier, prg_name, rewritten_head_preds, rewritten_edb_preds, self.original_programs_list[i].contains_choice, self.original_programs_list[i].contains_disjunction))
            
         #add rewritten constraint program
         prg_name = self.original_programs_list[-1].name
-        rewritten_preds = set()
+        rewritten_head_preds = set()
         for pred in self.original_programs_list[-1].head_predicates:
-            rewritten_preds.add(f"{pred}{suffix_p_iteration}") 
+            rewritten_head_preds.add(f"{pred}{suffix_p_iteration}") 
            
         self.counterexample_facts = " "
         counterexample_facts_signature = suffix_n_iteration if not self.pure_choice else suffix_p_iteration

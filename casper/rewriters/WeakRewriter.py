@@ -141,7 +141,7 @@ class WeakRewriter:
             # print(f"Applying col1 to index {index}")
             contains_choice = first_program.contains_choice or second_program.contains_choice
             contains_disjunction = first_program.contains_disjunction or second_program.contains_disjunction
-            collapsed_programs = QuantifiedProgram(f"{self.original_programs[index-1].rules}\n{self.original_programs[index].rules}", [], first_program_type, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates, contains_choice, contains_disjunction)
+            collapsed_programs = QuantifiedProgram(f"{self.original_programs[index-1].rules}\n{self.original_programs[index].rules}", [], first_program_type, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates, set(), contains_choice, contains_disjunction)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [collapsed_programs] + self.original_programs[index+1::]
             self.update_programs()
             return True
@@ -170,22 +170,22 @@ class WeakRewriter:
             weak_constraints.append(WeakConstraint(unsat_predicate_name, 1, SolverSettings.WEAK_NO_MODEL_LEVEL, []))
             contains_choice = first_program.contains_choice or second_program.contains_choice
             contains_disjunction = first_program.contains_disjunction or second_program.contains_disjunction
-            rewritten_plain_program = QuantifiedProgram(f"{first_program.rules}\n{or_rewriter.rewritten_program}\n{unsat_choice}", weak_constraints, ProgramQuantifier.EXISTS, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates | set([unsat_predicate_name]), contains_choice, contains_disjunction)
+            rewritten_plain_program = QuantifiedProgram(f"{first_program.rules}\n{or_rewriter.rewritten_program}\n{unsat_choice}", weak_constraints, ProgramQuantifier.EXISTS, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates | set([unsat_predicate_name]), set(), contains_choice, contains_disjunction)
             original_constraint_program = self.original_programs[-1]
 
             #rewriting last program (P_n - there is only C after)
             if index == len(self.original_programs) -2:
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.CONSTRAINTS
-                rewritten_constraint_program = QuantifiedProgram(f"{original_constraint_program.rules}\n:-{unsat_predicate_name}.", [], original_constraint_program.program_type, original_constraint_program.name, original_constraint_program.head_predicates, False, False)
+                rewritten_constraint_program = QuantifiedProgram(f"{original_constraint_program.rules}\n:-{unsat_predicate_name}.", [], original_constraint_program.program_type, original_constraint_program.name, original_constraint_program.head_predicates, set(), False, False)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_constraint_program]
 
             elif index == len(self.original_programs) -3: #there is exactly one forall after P_i
-                rewritten_constraint_program = QuantifiedProgram(f"{original_constraint_program.rules}\n:-{unsat_predicate_name}.", [], original_constraint_program.program_type, original_constraint_program.name, original_constraint_program.head_predicates, False, False)
+                rewritten_constraint_program = QuantifiedProgram(f"{original_constraint_program.rules}\n:-{unsat_predicate_name}.", [], original_constraint_program.program_type, original_constraint_program.name, original_constraint_program.head_predicates, set(), False, False)
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.FORALL
                 next_forall_program = self.original_programs[index+1]
                 or_next_forall_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, next_forall_program)
                 or_next_forall_rewriter.rewrite("", None)
-                rewritten_next_forall_program = QuantifiedProgram(or_next_forall_rewriter.rewritten_program, [], ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, next_forall_program.contains_choice, next_forall_program.contains_disjunction)
+                rewritten_next_forall_program = QuantifiedProgram(or_next_forall_rewriter.rewritten_program, [], ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, set(), next_forall_program.contains_choice, next_forall_program.contains_disjunction)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_next_forall_program] + [rewritten_constraint_program]
             else: #there is at least one forall and one exists after P_i
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.FORALL and self.original_programs[index+2].program_type == ProgramQuantifier.EXISTS
@@ -193,8 +193,8 @@ class WeakRewriter:
                 next_exists_program = self.original_programs[index+2]
                 or_next_forall_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, next_forall_program)
                 or_next_forall_rewriter.rewrite("", None)
-                rewritten_next_forall_program = QuantifiedProgram(or_next_forall_rewriter.rewritten_program, [], ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, next_forall_program.contains_choice, next_forall_program.contains_disjunction)
-                next_exists_program_rewritten = QuantifiedProgram(f"{next_exists_program.rules}\n:-{unsat_predicate_name}{next_exists_program.name}." , next_exists_program.weak_constraints, ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, next_exists_program.contains_choice, next_exists_program.contains_disjunction)
+                rewritten_next_forall_program = QuantifiedProgram(or_next_forall_rewriter.rewritten_program, [], ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, set(), next_forall_program.contains_choice, next_forall_program.contains_disjunction)
+                next_exists_program_rewritten = QuantifiedProgram(f"{next_exists_program.rules}\n:-{unsat_predicate_name}{next_exists_program.name}." , next_exists_program.weak_constraints, ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, set(), next_exists_program.contains_choice, next_exists_program.contains_disjunction)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_next_forall_program] + [next_exists_program_rewritten] + self.original_programs[index+3:len(self.original_programs)]
             self.update_programs()
             return True
@@ -219,7 +219,7 @@ class WeakRewriter:
             unsat_choice = "{" + unsat_predicate_name + "}."
             weak_constraints = first_program.weak_constraints
             weak_constraints.append(WeakConstraint(unsat_predicate_name, 1, SolverSettings.WEAK_NO_MODEL_LEVEL, []))
-            rewritten_plain_program = QuantifiedProgram(f"{first_program.rules}\n{or_p2_rewriter.rewritten_program}\n{unsat_choice}", weak_constraints, ProgramQuantifier.FORALL, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates | set([unsat_predicate_name]), first_program.contains_choice, first_program.contains_disjunction)
+            rewritten_plain_program = QuantifiedProgram(f"{first_program.rules}\n{or_p2_rewriter.rewritten_program}\n{unsat_choice}", weak_constraints, ProgramQuantifier.FORALL, f"{first_program_name}_{second_program_name}", second_program.head_predicates | first_program.head_predicates | set([unsat_predicate_name]), set(), first_program.contains_choice, first_program.contains_disjunction)
             original_constraint_program = self.original_programs[-1]
 
             #rewriting last program (P_n - there is only C after)
@@ -227,18 +227,18 @@ class WeakRewriter:
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.CONSTRAINTS
                 constraint_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, original_constraint_program)
                 constraint_rewriter.rewrite("", None)
-                rewritten_constraint_program = QuantifiedProgram(f"{constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, original_constraint_program.name , original_constraint_program.head_predicates, False, False)
+                rewritten_constraint_program = QuantifiedProgram(f"{constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, original_constraint_program.name , original_constraint_program.head_predicates, set(), False, False)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_constraint_program]
 
             elif index == len(self.original_programs) -3: #there is exactly one forall after P_i
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.EXISTS
                 constraint_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, original_constraint_program)
                 constraint_rewriter.rewrite("", None)
-                rewritten_constraint_program = QuantifiedProgram(f"{constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, original_constraint_program.name , original_constraint_program.head_predicates, False, False) 
+                rewritten_constraint_program = QuantifiedProgram(f"{constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, original_constraint_program.name , original_constraint_program.head_predicates, set(), False, False) 
                 next_exists_program = self.original_programs[index+1]
                 or_next_exists_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, next_exists_program)
                 or_next_exists_rewriter.rewrite("", None)
-                rewritten_next_exists_program = QuantifiedProgram(or_next_exists_rewriter.rewritten_program, [], ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, next_exists_program.contains_choice, next_exists_program.contains_disjunction)
+                rewritten_next_exists_program = QuantifiedProgram(or_next_exists_rewriter.rewritten_program, [], ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, set(), next_exists_program.contains_choice, next_exists_program.contains_disjunction)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_next_exists_program] + [rewritten_constraint_program]
             else: #there is at least one forall and one exists after P_i
                 assert self.original_programs[index+1].program_type == ProgramQuantifier.EXISTS and self.original_programs[index+2].program_type == ProgramQuantifier.FORALL
@@ -246,8 +246,8 @@ class WeakRewriter:
                 next_forall_program = self.original_programs[index+2]
                 or_next_exists_rewriter = OrProgramRewriter(set(), unsat_predicate_name, False, next_exists_program)
                 or_next_exists_rewriter.rewrite("", None)
-                rewritten_next_exists_program = QuantifiedProgram(or_next_exists_rewriter.rewritten_program, [], ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, next_exists_program.contains_choice, next_exists_program.contains_disjunction)
-                rewritten_next_forall_program = QuantifiedProgram(f"{next_forall_program.rules}\n:-{unsat_predicate_name}{next_forall_program.name}.", next_forall_program.weak_constraints, ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, next_forall_program.contains_choice, next_forall_program.contains_disjunction)
+                rewritten_next_exists_program = QuantifiedProgram(or_next_exists_rewriter.rewritten_program, [], ProgramQuantifier.EXISTS, next_exists_program.name, next_exists_program.head_predicates, set(), next_exists_program.contains_choice, next_exists_program.contains_disjunction)
+                rewritten_next_forall_program = QuantifiedProgram(f"{next_forall_program.rules}\n:-{unsat_predicate_name}{next_forall_program.name}.", next_forall_program.weak_constraints, ProgramQuantifier.FORALL, next_forall_program.name, next_forall_program.head_predicates, set(), next_forall_program.contains_choice, next_forall_program.contains_disjunction)
                 self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_plain_program] + [rewritten_next_exists_program] + [rewritten_next_forall_program] + self.original_programs[index+3:len(self.original_programs)]
             
             self.update_programs()
@@ -283,15 +283,15 @@ class WeakRewriter:
         levels_atoms_clone_str = "\n".join(levels_atoms_clone)
         
         dominated_pred_name = check_rewriter.dominated_predicate_name
-        rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates, rewriting_program.contains_choice, rewriting_program.contains_disjunction)
+        rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates, set(), rewriting_program.contains_choice, rewriting_program.contains_disjunction)
         #rewrite program and add one forall level (I am rewriting \exitst_weak P_1 : C)
         rewritten = False
         if index == len(self.original_programs)-2: #program must be the last one before constraint
             # print(f"Applying col4 to index {index}")
             added_program_head_predicates =  check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
-            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}", [], ProgramQuantifier.FORALL, f"{rewriting_program_name}_col4", added_program_head_predicates, rewriting_program.contains_choice, rewriting_program.contains_disjunction)
+            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}", [], ProgramQuantifier.FORALL, f"{rewriting_program_name}_col4", added_program_head_predicates, set(), rewriting_program.contains_choice, rewriting_program.contains_disjunction)
             constraint_program = self.original_programs[-1]
-            rewritten_constraint_program = QuantifiedProgram(f"{constraint_program.rules}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}\n:-{dominated_pred_name}.", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates | set([dominated_pred_name]) | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate, False, False)
+            rewritten_constraint_program = QuantifiedProgram(f"{constraint_program.rules}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}\n:-{dominated_pred_name}.", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates | set([dominated_pred_name]) | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate, set(), False, False)
             self.rewritten_programs = self.original_programs[0:index] + [rewritten_rewriting_program] + [added_program] + [rewritten_constraint_program]
             rewritten = True
         #rewrite first program exploiting second forall program (no extra quantied program)
@@ -305,7 +305,7 @@ class WeakRewriter:
             p2_prime_head_predicates = next_forall_program.head_predicates | rewriting_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
             contains_choice = next_forall_program.contains_choice or rewriting_program.contains_choice
             contains_disjunction = next_forall_program.contains_disjunction or rewriting_program.contains_disjunction
-            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates, contains_choice, contains_disjunction)
+            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates, set(), contains_choice, contains_disjunction)
             rewritten_constraint_program = QuantifiedProgram(f"{constraint_program.rules}\n:-{dominated_pred_name}.", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates, False, False)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_constraint_program]
             rewritten = True
@@ -319,9 +319,9 @@ class WeakRewriter:
             p2_prime_head_predicates = next_forall_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
             contains_choice = next_forall_program.contains_choice or rewriting_program.contains_choice
             contains_disjunction = next_forall_program.contains_disjunction or rewriting_program.contains_disjunction
-            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates, contains_choice, contains_disjunction)
+            p2_prime_program = QuantifiedProgram(f"{or_next_forall_program_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.FORALL, rewriting_program_name, p2_prime_head_predicates, set(), contains_choice, contains_disjunction)
             next_exists_program = self.original_programs[index+2]
-            rewritten_next_exists_program = QuantifiedProgram(f"{next_exists_program.rules}\n:-{dominated_pred_name}.", [], next_exists_program.program_type, next_exists_program.name, next_exists_program.head_predicates, next_exists_program.contains_choice, next_exists_program.contains_disjunction)
+            rewritten_next_exists_program = QuantifiedProgram(f"{next_exists_program.rules}\n:-{dominated_pred_name}.", [], next_exists_program.program_type, next_exists_program.name, next_exists_program.head_predicates, set(), next_exists_program.contains_choice, next_exists_program.contains_disjunction)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_next_exists_program] + self.original_programs[index+3::]
             
             rewritten = True
@@ -358,16 +358,16 @@ class WeakRewriter:
 
         dominated_pred_name = check_rewriter.dominated_predicate_name
         rewritten = False
-        rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates, rewriting_program.contains_choice, rewriting_program.contains_disjunction)
+        rewritten_rewriting_program = QuantifiedProgram(rewriting_program.rules, [], rewriting_program.program_type, rewriting_program.name, rewriting_program.head_predicates, set(), rewriting_program.contains_choice, rewriting_program.contains_disjunction)
         #rewrite program and add one forall level (I am rewriting \exitst_weak P_1 : C)
         if index == len(self.original_programs)-2: #program must be the last one before constraint
             # print(f"Applying col5 to index {index} -2")
             added_program_head_predicates = check_rewriter.clone_program_rewriter.rewritten_program_head_predicates
-            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}", [], ProgramQuantifier.EXISTS, f"{rewriting_program_name}_col5", added_program_head_predicates, rewriting_program.contains_choice, rewriting_program.contains_disjunction)
+            added_program = QuantifiedProgram(f"{check_rewriter.clone_program}", [], ProgramQuantifier.EXISTS, f"{rewriting_program_name}_col5", added_program_head_predicates, set(), rewriting_program.contains_choice, rewriting_program.contains_disjunction)
             constraint_program = self.original_programs[-1]
             or_constraint_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, constraint_program)
             or_constraint_rewriter.rewrite("", None)
-            rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates | set([dominated_pred_name]) | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate, False, False)
+            rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates | set([dominated_pred_name]) | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates_with_aggregate, set(), False, False)
             self.rewritten_programs = self.original_programs[0:index] + [rewritten_rewriting_program] + [added_program] + [rewritten_constraint_program]
             rewritten = True
         #rewrite first program exploiting second forall program (no extra quantied program)
@@ -381,10 +381,10 @@ class WeakRewriter:
             p2_prime_head_predicates = next_exists_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
             contains_choice = next_exists_program.contains_choice or rewriting_program.contains_choice
             contains_disjunction = next_exists_program.contains_disjunction or rewriting_program.contains_disjunction
-            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates, contains_choice, contains_disjunction)
+            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates, set(), contains_choice, contains_disjunction)
             or_constraint_rewriter = OrProgramRewriter(set(), dominated_pred_name, False, constraint_program)
             or_constraint_rewriter.rewrite("", None)
-            rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates, False, False)
+            rewritten_constraint_program = QuantifiedProgram(f"{or_constraint_rewriter.rewritten_program}", [], ProgramQuantifier.CONSTRAINTS, constraint_program.name, constraint_program.head_predicates, set(), False, False)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_constraint_program]
             rewritten = True
         else: #the next program is a forall and the next one is an exists
@@ -396,9 +396,9 @@ class WeakRewriter:
             p2_prime_head_predicates = rewriting_program.head_predicates | check_rewriter.dominated_program_head_predicates | check_rewriter.clone_program_rewriter.rewritten_program_head_predicates | check_rewriter.clone_cost_rewriter.rewritten_program_head_predicates | check_rewriter.cost_rewriter.rewritten_program_head_predicates 
             contains_choice = next_exists_program.contains_choice or rewriting_program.contains_choice
             contains_disjunction = next_exists_program.contains_disjunction or rewriting_program.contains_disjunction
-            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates, contains_choice, contains_disjunction)
+            p2_prime_program = QuantifiedProgram(f"{or_next_exists_rewriter.rewritten_program}\n{check_rewriter.clone_program}\n{check_rewriter.cost_program}\n{check_rewriter.clone_cost_program}\n{check_rewriter.dominated_program}\n{levels_atoms_str}\n{levels_atoms_clone_str}", [], ProgramQuantifier.EXISTS, rewriting_program_name, p2_prime_head_predicates, set(), contains_choice, contains_disjunction)
             next_forall_program = self.original_programs[index+2]
-            rewritten_next_forall_program = QuantifiedProgram(f"{next_forall_program.rules}\n:-{dominated_pred_name}.", [], next_forall_program.program_type, next_forall_program.name, next_forall_program.head_predicates, next_forall_program.contains_choice, next_forall_program.contains_disjunction)
+            rewritten_next_forall_program = QuantifiedProgram(f"{next_forall_program.rules}\n:-{dominated_pred_name}.", [], next_forall_program.program_type, next_forall_program.name, next_forall_program.head_predicates, set(), next_forall_program.contains_choice, next_forall_program.contains_disjunction)
             self.rewritten_programs = self.original_programs[0:max(index-1, 0)] + [rewritten_rewriting_program] + [p2_prime_program] + [rewritten_next_forall_program] + self.original_programs[index+3::]
             rewritten = True
 
@@ -466,7 +466,7 @@ class WeakRewriter:
         flipped_constraint_with_weak = f"{flipped_constraint}\n{weak_constraint}"
         
         p = self.original_programs[0]
-        self.rewritten_programs = [QuantifiedProgram(f"{p.rules}\n{flipped_constraint_with_weak}",  p.weak_constraints, ProgramQuantifier.EXISTS, "", p.head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"]), p.contains_choice, p.contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)]
+        self.rewritten_programs = [QuantifiedProgram(f"{p.rules}\n{flipped_constraint_with_weak}",  p.weak_constraints, ProgramQuantifier.EXISTS, "", p.head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"]), set(), p.contains_choice, p.contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), set(), False, False)]
         self.update_programs()
 
     def rewrite_forall_weak_c(self):
@@ -480,7 +480,7 @@ class WeakRewriter:
         flipped_constraint_with_weak = f"{flipped_constraint}\n{weak_constraint}"
 
         p = self.original_programs[0]
-        self.rewritten_programs = [QuantifiedProgram(f"{p.rules}\n{flipped_constraint_with_weak}",  p.weak_constraints, ProgramQuantifier.FORALL, "", p.head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"]), p.contains_choice, p.contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)]
+        self.rewritten_programs = [QuantifiedProgram(f"{p.rules}\n{flipped_constraint_with_weak}",  p.weak_constraints, ProgramQuantifier.FORALL, "", p.head_predicates | self.original_programs[1].head_predicates | set([f"{SolverSettings.UNSAT_C_PREDICATE}"]), set(), p.contains_choice, p.contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), set(), False, False)]
         self.update_programs()
 
 
@@ -505,7 +505,7 @@ class WeakRewriter:
         #the resulting ASPQ is an ASP program P_1 , which is equivalent to the ASPQ: \exists P_1 : C (with C = {})
         contains_choice = self.original_programs[0].contains_choice or p_2.contains_choice
         contains_disjunction = self.original_programs[0].contains_disjunction or p_2.contains_disjunction
-        self.rewritten_programs = [QuantifiedProgram(rewritten_program, [], ProgramQuantifier.EXISTS, "p1", self.original_programs[0].head_predicates, contains_choice, contains_disjunction), QuantifiedProgram(rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)]
+        self.rewritten_programs = [QuantifiedProgram(rewritten_program, [], ProgramQuantifier.EXISTS, "p1", self.original_programs[0].head_predicates, set(), contains_choice, contains_disjunction), QuantifiedProgram(rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", set(), set(), False, False)]
         #P_1 = R(P_1) \cup R(P_2), but I am interested on models of P_1
         self.rewritten_programs[0].set_output_predicates(self.original_programs[0].head_predicates)
         self.update_programs()
@@ -519,7 +519,7 @@ class WeakRewriter:
         or_predicate_suffix = 0
         rewriter_p_2.rewrite("", or_predicate_suffix)
 
-        programs_handler_rewriting = ProgramsHandler([QuantifiedProgram("", [], ProgramQuantifier.EXISTS, "", set(), False, False), self.original_programs[-1]], "", None)
+        programs_handler_rewriting = ProgramsHandler([QuantifiedProgram("", [], ProgramQuantifier.EXISTS, "", set(), set(), False, False), self.original_programs[-1]], "", None)
         programs_handler_rewriting.flip_constraint()
         c = programs_handler_rewriting.neg_c()
         rewriter_c = OrProgramRewriter(set(), unsat_pred_name, False, c)
@@ -531,7 +531,7 @@ class WeakRewriter:
         rewritten_program = f"{self.original_programs[0].rules}\n{weak_repr}\n{rewriter_p_2.rewritten_program}\n{rewriter_c.rewritten_program}\n{unsat_choice}\n:~ {rewriter_p_2.unsat_atom_name}{or_predicate_suffix}.[{SolverSettings.WEIGHT_FOR_VIOLATED_WEAK_CONSTRAINTS}@{SolverSettings.WEAK_NO_MODEL_LEVEL}]"
 
         # self.rewritten_programs = [QuantifiedProgram(rewritten_program, [], ProgramQuantifier.EXISTS, "p1", self.original_programs[0].head_predicates), QuantifiedProgram(rewriter_c.rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", self.original_programs[2].head_predicates)]
-        self.rewritten_programs = [QuantifiedProgram(rewritten_program, [], ProgramQuantifier.FORALL, "p1", self.original_programs[0].head_predicates, contains_choice, contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)]
+        self.rewritten_programs = [QuantifiedProgram(rewritten_program, [], ProgramQuantifier.FORALL, "p1", self.original_programs[0].head_predicates, set(), contains_choice, contains_disjunction), QuantifiedProgram("", [], ProgramQuantifier.CONSTRAINTS, "c", set(), False, False)]
         #P_1 = R(P_1) \cup R(P_2), but I am interested on models of P_1
         self.rewritten_programs[0].set_output_predicates(self.original_programs[0].head_predicates)
         
@@ -575,7 +575,7 @@ class WeakRewriter:
         #p_1.weak_constraints are added since this method is also used when rewriting \forall_weak \forall_weak (after bumping up weak levels)
         contains_choice = p_1.contains_choice or p_2.contains_choice
         contains_disjunction = p_1.contains_disjunction or p_2.contains_disjunction
-        self.rewritten_programs = [QuantifiedProgram(p_1.rules + "\n" + p_2.rules + "\n" + weak_repr, [], ProgramQuantifier.EXISTS, "p1", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates, contains_choice, contains_disjunction), QuantifiedProgram(cloned_p2_program, [], ProgramQuantifier.FORALL, "p2", cloned_p2_program_head_predicates, p_2.contains_choice, p_2.contains_disjunction), QuantifiedProgram(c_program, [], ProgramQuantifier.CONSTRAINTS, "c", c_head_predicates, False, False)]
+        self.rewritten_programs = [QuantifiedProgram(p_1.rules + "\n" + p_2.rules + "\n" + weak_repr, [], ProgramQuantifier.EXISTS, "p1", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates, set(), contains_choice, contains_disjunction), QuantifiedProgram(cloned_p2_program, [], ProgramQuantifier.FORALL, "p2", cloned_p2_program_head_predicates, set(), p_2.contains_choice, p_2.contains_disjunction), QuantifiedProgram(c_program, [], ProgramQuantifier.CONSTRAINTS, "c", c_head_predicates, set(), False, False)]
         
         #P_1 = P_1 \cup{{unsat}.}  \cup or(P_2, unsat) \cup or(C, unsat) \cup {:~unsat. [2@l_min]}, but I am interested on models of P_1
         self.rewritten_programs[0].set_output_predicates(self.original_programs[0].head_predicates)
@@ -623,7 +623,7 @@ class WeakRewriter:
         contains_choice = p_1.contains_choice or p_2.contains_choice
         contains_disjunction = p_1.contains_disjunction or p_2.contains_disjunction
         #p_1.weak_constraints are added since this method is also used when rewriting \exists_weak \exists_weak (after bumping up weak levels)
-        self.rewritten_programs = [QuantifiedProgram(p_1.rules + "\n" + p_2.rules + "\n" + weak_repr, [], ProgramQuantifier.FORALL, "p1", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates, contains_choice, contains_disjunction), QuantifiedProgram(cloned_p2_program, [], ProgramQuantifier.EXISTS, "p2", cloned_p2_program_head_predicates, p_2.contains_choice, p_2.contains_disjunction), QuantifiedProgram(c_program, [], ProgramQuantifier.CONSTRAINTS, "c", c_head_predicates, False, False)]
+        self.rewritten_programs = [QuantifiedProgram(p_1.rules + "\n" + p_2.rules + "\n" + weak_repr, [], ProgramQuantifier.FORALL, "p1", self.original_programs[0].head_predicates | self.original_programs[1].head_predicates, set(), contains_choice, contains_disjunction), QuantifiedProgram(cloned_p2_program, [], ProgramQuantifier.EXISTS, "p2", cloned_p2_program_head_predicates, p_2.contains_choice, p_2.contains_disjunction), QuantifiedProgram(c_program, [], ProgramQuantifier.CONSTRAINTS, "c", c_head_predicates, False, False)]
         #P_1 = P_1 \cup{{unsat}.}  \cup or(P_2, unsat) \cup or(neg(C), unsat) \cup {:~unsat. [2@l_min]}, but I am interested on models of P_1
         self.rewritten_programs[0].set_output_predicates(self.original_programs[0].head_predicates)
         self.update_programs()

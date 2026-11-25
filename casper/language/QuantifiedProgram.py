@@ -27,12 +27,13 @@ class QuantifiedProgram:
     program_type : ProgramQuantifier
     name : str
     head_predicates : set
+    edb_predicates: set
     output_predicates : set
     contains_choice : bool
     contains_disjunction : bool
     contains_aggregates : bool
 
-    def __init__(self, rules, weak_constraints, program_type, program_name, head_predicates, contains_choice, contains_disjucntion, contains_aggregates=False, rules_as_constraints=None, rules_as_constraints_clone=None) -> None:
+    def __init__(self, rules, weak_constraints, program_type, program_name, head_predicates, edb_predicates, contains_choice, contains_disjucntion, contains_aggregates=False, rules_as_constraints=None, rules_as_constraints_clone=None) -> None:
         self.rules = rules
         self.rules_as_constraints = rules_as_constraints
         self.rules_as_constraints_clone = rules_as_constraints_clone
@@ -41,6 +42,7 @@ class QuantifiedProgram:
         self.program_type = program_type
         self.name = program_name
         self.head_predicates = set(head_predicates)
+        self.edb_predicates = edb_predicates
         self.output_predicates = set()
         self.contains_choice = contains_choice
         self.contains_disjunction = contains_disjucntion

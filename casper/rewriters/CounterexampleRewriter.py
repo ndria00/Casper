@@ -54,7 +54,7 @@ class CounterexampleRewriter:
                 else:
                     quantifier = self.original_programs_list[i].program_type
                 prg = self.original_programs_list[i]
-                self.rewritten_programs_list.append(QuantifiedProgram(prg.rules, [], quantifier, prg.name, prg.head_predicates, prg.contains_choice, prg.contains_disjunction))        
+                self.rewritten_programs_list.append(QuantifiedProgram(prg.rules, [], quantifier, prg.name, prg.head_predicates, prg.edb_predicates, prg.contains_choice, prg.contains_disjunction))
             if self.flip_quantifier_and_constraint:
                 self.rewritten_programs_list.append(self.negated_constraint_program)
             else:

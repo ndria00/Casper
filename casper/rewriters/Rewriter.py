@@ -19,12 +19,14 @@ class Rewriter(clingo.ast.Transformer):
     unsat_pred_name : str
     program : list[str]
     head_predicates : set
+    edb_predicates : set
 
     def __init__(self, unsat_pred_name=None):
         super().__init__()
         self.unsat_pred_name = unsat_pred_name
         self.program = []
         self.head_predicates = set()
+        self.edb_predicates = set()
 
     def visit_Rule(self, node):
         pass

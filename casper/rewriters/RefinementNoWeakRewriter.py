@@ -43,7 +43,7 @@ class RefinementNoWeakRewriter(RefinementRewriter):
         self.reduct_rewriter.rewrite(counterexample, iteration)
     
         self.constraint_program_rewriter.rewrite(self.SUFFIX_P, iteration)
-        self.rewritten_programs_list = [*self.reduct_rewriter.rewritten_programs_list, QuantifiedProgram(self.constraint_program_rewriter.rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", self.constraint_program_rewriter.rewritten_predicates, False, False)]
+        self.rewritten_programs_list = [*self.reduct_rewriter.rewritten_programs_list, QuantifiedProgram(self.constraint_program_rewriter.rewritten_program, [], ProgramQuantifier.CONSTRAINTS, "c", self.constraint_program_rewriter.rewritten_predicates, set(), False, False)]
         
         
     #called from outside only when the refinement becomes an ASP program
@@ -53,12 +53,13 @@ class RefinementNoWeakRewriter(RefinementRewriter):
             refinement_aspq = []
             refinement_str = ""
             head_predicates = set()
+            edb_predicates = set()
 
             for i in range(2):
                 refinement_str += f"\n{self.rewritten_programs_list[i].rules}\n"
                 head_predicates = head_predicates | self.rewritten_programs_list[i].head_predicates
-
-            refinement_aspq.append(QuantifiedProgram(refinement_str, [], ProgramQuantifier.EXISTS, "1", head_predicates, False, False))
+                edb_predicates = edb_predicates | self.rewritten_programs_list[i].edb_predicates
+            refinement_aspq.append(QuantifiedProgram(refinement_str, [], ProgramQuantifier.EXISTS, "1", head_predicates, edb_predicates, False, False))
 
             for i in range(2, len(self.rewritten_programs_list)):
                 #the third program has name 4 since 1 is not in the original list

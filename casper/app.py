@@ -33,7 +33,7 @@ def _handle_signal(signum, frame):
 def entrypoint():
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
-    parser = argparse.ArgumentParser(prog = "Casper", description = "A native solver based on CEGAR for 2-ASP(Q)\n")
+    parser = argparse.ArgumentParser(prog = "casper", description = "A CEGAR-based solver for ASP(Q)\n")
 
     parser.add_argument('--problem', help="path to problem file\n", required=True)
     parser.add_argument('--instance', help="path to instance file\n", required=False, default="")
@@ -41,11 +41,12 @@ def entrypoint():
     parser.add_argument('--global-weak-lower-bound', help="Apply lower bound improving for global weak constraints (default is upper bound improving)\n", required=False, action="store_true")
     parser.add_argument('--no-weak', help="completely remove weak constraints before solve optimization ASP(Q) programs\n", required=False, action="store_true")
     parser.add_argument('--statistics', help="print solving statistics\n", required=False, action="store_true")
-    parser.add_argument('--json', help="print quantified answer sets in json format - done for integration with ASPChef\n", required=False, action="store_true")
+    parser.add_argument('--json', help="print quantified answer sets in json format\n", required=False, action="store_true")
     parser.add_argument('--constraint', help="enable constraint print of models\n", required=False, action="store_true")
     parser.add_argument('--disjunction', help="enable disjunction in the solver\n", required=False, action="store_true")
-    parser.add_argument('-n', help="number of q-answer sets to compute (if zero enumerate)\n", default=1)
+    parser.add_argument('-n', help="number of q-answer sets to compute (if zero enumerate)\ndoes not apply to universal programs as well as to programs with weak constraints\n", default=1)
     parser.add_argument('--blocking-ref', help="Applies a weaker refinement transformation based on blocking clauses only\n", required=False, action="store_true")
+    parser.add_argument('--solve-limit', help="maximum number of countermoves that the solver explores before terminating - by default no bound is set\n", required=False, default="-1")
     args = parser.parse_args()
     encoding_path = args.problem
     instance_path = args.instance
@@ -70,7 +71,7 @@ def entrypoint():
     collapse_global_weak_in_p1 = bool(args.global_weak_lower_bound)
     split_program_rewriter = SplitProgramRewriter(encoding_program, bool(args.disjunction))
     solver_settings = SolverSettings(int(args.n), bool(args.debug), bool(args.constraint), split_program_rewriter.pure_choice, bool(args.no_weak), collapse_global_weak_in_p1, bool(args.json), bool(args.blocking_ref))
-    
+    solver_settings.set_stop_after_max_ce(int(args.solve_limit))
 
     programs = split_program_rewriter.programs
     global_weak = split_program_rewriter.global_weak
@@ -101,6 +102,11 @@ def entrypoint():
         solver_settings.n_models = 1
     solver  = ASPQSolver(programs_handler, solver_settings, True, 0)
     result = solver.solve_n_levels([], "")
+    if solver.abort_solve:
+        if bool(args.statistics):
+                    SolverStatistics().print_statistics()
+        print("ASPQ INDETERMINATE")
+        exit(0)
     if result:
         if bool(args.statistics):
             SolverStatistics().print_statistics()
